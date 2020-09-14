@@ -109,7 +109,7 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                                  Array4<Real const> const& ftra)
 {
 #ifdef AMREX_USE_EB
-    AMREX_ALWAYS_ASSERT(!m_use_godunov);
+    //AMREX_ALWAYS_ASSERT(!m_use_godunov);
 
     auto const& fact = EBFactory(lev);
     EBCellFlagFab const& flagfab = fact.getMultiEBCellFlagFab()[mfi];
@@ -198,13 +198,44 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                                                tmpfab.dataPtr(),m_godunov_ppm);
         }
         if (m_advect_tracer) {
-            godunov::compute_godunov_advection(lev, bx, m_ntrac,
-                                               dtdt, rhotrac,
-                                               AMREX_D_DECL(umac, vmac, wmac), ftra,
-                                               geom, m_dt, 
-                                               get_tracer_bcrec_device_ptr(),
-                                               get_tracer_iconserv_device_ptr(),
-                                               tmpfab.dataPtr(),m_godunov_ppm);
+#ifdef AMREX_USE_EB 
+            if (false)
+            {
+                Box tmpbox = amrex::surroundingNodes(bx);
+                int tmpcomp = AMREX_SPACEDIM*AMREX_SPACEDIM;
+                Box gbx = bx;
+                gbx.grow(2);
+                tmpbox.grow(3);
+                tmpcomp += AMREX_SPACEDIM;
+        
+                FArrayBox tmpfab(tmpbox, tmpcomp);
+                Elixir eli = tmpfab.elixir();
+        
+                AMREX_D_TERM(Array4<Real> fx = tmpfab.array(0);,
+                             Array4<Real> fy = tmpfab.array(nmaxcomp);,
+                             Array4<Real> fz = tmpfab.array(nmaxcomp*2););
+
+                godunov::compute_godunov_advection_eb(lev, gbx, m_ntrac,
+                                                      AMREX_D_DECL(fx, fy, fz), rhotrac,
+                                                      AMREX_D_DECL(umac, vmac, wmac), ftra,
+                                                      get_tracer_bcrec().data(),
+                                                      get_tracer_bcrec_device_ptr(),
+                                                      flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, Geom(), m_dt);
+
+                mol::compute_convective_rate_eb(lev, gbx, m_ntrac, dtdt, AMREX_D_DECL(fx, fy, fz),
+                                                flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());
+
+            }else
+#endif
+            {
+                godunov::compute_godunov_advection(lev, bx, m_ntrac,
+                                                   dtdt, rhotrac,
+                                                   AMREX_D_DECL(umac, vmac, wmac), ftra,
+                                                   geom, m_dt,
+                                                   get_tracer_bcrec_device_ptr(),
+                                                   get_tracer_iconserv_device_ptr(),
+                                                   tmpfab.dataPtr(),m_godunov_ppm);
+            }
         }
         Gpu::streamSynchronize();
     }
@@ -259,6 +290,13 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
             }
 
             if (m_advect_tracer) {
+                /*godunov::compute_godunov_advection_eb(lev, gbx, m_ntrac,
+                                                      AMREX_D_DECL(fx, fy, fz), rhotrac,
+                                                      AMREX_D_DECL(umac, vmac, wmac), ftra,
+                                                      get_tracer_bcrec().data(),
+                                                      get_tracer_bcrec_device_ptr(),
+                                                      flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, Geom(), m_dt);
+                */
                 mol::compute_convective_fluxes_eb(lev, gbx, m_ntrac,
                                                   AMREX_D_DECL(fx, fy, fz), rhotrac, 
                                                   AMREX_D_DECL(umac, vmac, wmac),
@@ -267,7 +305,7 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                                                   flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, Geom());
                 mol::compute_convective_rate_eb(lev, gbx, m_ntrac, dUdt_tmp, AMREX_D_DECL(fx, fy, fz),
                                                 flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());
-                redistribute_eb(lev, bx, m_ntrac, dtdt, dUdt_tmp, scratch, flag, vfrac);
+                //redistribute_eb(lev, bx, m_ntrac, dtdt, dUdt_tmp, scratch, flag, vfrac);
             }
         }
         else

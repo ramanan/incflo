@@ -5,8 +5,12 @@
 #ifndef Godunov_H
 #define Godunov_H
 
-#include <AMReX_MultiFabUtil.H>
 #include <AMReX_BCRec.H>
+#include <AMReX_MultiFab.H>
+
+#ifdef AMREX_USE_EB
+#include <AMReX_MultiCutFab.H>
+#endif
 
 namespace godunov {
 
@@ -122,6 +126,26 @@ namespace godunov {
                                     int const* iconserv,
                                     amrex::Real* p, bool use_ppm, bool is_velocity = false);
 
+#ifdef AMREX_USE_EB
+    void compute_godunov_advection_eb (int lev, amrex::Box const& bx, int ncomp,
+                                       AMREX_D_DECL(amrex::Array4<amrex::Real> const& fx,
+                                                    amrex::Array4<amrex::Real> const& fy,
+                                                    amrex::Array4<amrex::Real> const& fz),
+                                       amrex::Array4<amrex::Real const> const& q,
+                                       AMREX_D_DECL(amrex::Array4<amrex::Real const> const& umac,
+                                                    amrex::Array4<amrex::Real const> const& vmac,
+                                                    amrex::Array4<amrex::Real const> const& wmac),
+                                       amrex::Array4<amrex::Real const> const& fq,
+                                       amrex::BCRec const* h_bcrec,
+                                       amrex::BCRec const* d_bcrec,
+                                       amrex::Array4<amrex::EBCellFlag const> const& flag,
+                                       AMREX_D_DECL(amrex::Array4<amrex::Real const> const& fcx,
+                                                    amrex::Array4<amrex::Real const> const& fcy,
+                                                    amrex::Array4<amrex::Real const> const& fcz),
+                                       amrex::Array4<amrex::Real const> const& ccc,
+                                       amrex::Vector<amrex::Geometry> geom,
+                                       amrex::Real m_dt);
+#endif
 } // namespace godunov
 
 #endif /* Godunov_H */
