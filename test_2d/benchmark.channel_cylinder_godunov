@@ -2,13 +2,13 @@
 #            SIMULATION STOP            #
 #.......................................#
 #stop_time               =   0.025       # Max (simulated) time to evolve
-max_step                =  100           # Max number of time steps
+max_step                =   500           # Max number of time steps
 steady_state            =   0           # Steady-state solver? 
 
 #¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨#
 #         TIME STEP COMPUTATION         #
 #.......................................#
-incflo.fixed_dt         =   -1.0        # Use this constant dt if > 0
+incflo.fixed_dt         =   -1        # Use this constant dt if > 0
 incflo.cfl              =   0.45        # CFL factor
 
 #¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨#
@@ -31,7 +31,7 @@ incflo.ntrac            =   1           # Number of tracers
 incflo.advect_tracer    =   true        # Should we update them?
 incflo.mu_s             =   0.001       # Scalar diffusion coefficient
 
-incflo.use_godunov      =   false
+incflo.use_godunov      =   true
 #¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨#
 #        ADAPTIVE MESH REFINEMENT       #
 #.......................................#
@@ -66,7 +66,7 @@ xhi.pressure            =   0.0
 incflo.geometry         = "sphere"
 sphere.internal_flow    = false
 sphere.radius           = 0.05000001
-sphere.center           = 0.15  0.2 0.0
+sphere.center           = 0.25  0.2 0.0
 
 #¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨#
 #           INITIAL CONDITIONS          #
