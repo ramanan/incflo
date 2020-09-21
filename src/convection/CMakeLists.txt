@@ -15,4 +15,5 @@ target_sources(incflo
    incflo_godunov_ppm.cpp
    incflo_godunov_plm.H
    incflo_godunov_ppm.H
+   incflo_godunov_predict_eb.cpp
    )

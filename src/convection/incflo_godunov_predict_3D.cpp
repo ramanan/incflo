@@ -9,6 +9,9 @@ void godunov::predict_godunov (int lev, Real time, MultiFab& u_mac, MultiFab& v_
                                MultiFab& w_mac, MultiFab const& vel, MultiFab const& vel_forces,
                                Vector<BCRec> const& h_bcrec,
                                       BCRec  const* d_bcrec,
+#ifdef AMREX_USE_EB
+                               EBFArrayBoxFactory const* ebfact,
+#endif
                                Vector<Geometry> geom, Real l_dt, 
                                bool use_ppm, bool use_forces_in_trans)
 {

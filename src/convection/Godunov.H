@@ -24,6 +24,9 @@ namespace godunov {
                           amrex::MultiFab const& vel_forces,
                           amrex::Vector<amrex::BCRec> const& h_bcrec,
                                         amrex::BCRec  const* d_bcrec,
+#ifdef AMREX_USE_EB
+                          amrex::EBFArrayBoxFactory const* ebfact,
+#endif
                           amrex::Vector<amrex::Geometry> geom,
                           amrex::Real dt, bool use_ppm, bool use_forces_in_trans);
 
@@ -127,6 +130,26 @@ namespace godunov {
                                     amrex::Real* p, bool use_ppm, bool is_velocity = false);
 
 #ifdef AMREX_USE_EB
+    void predict_vels_on_faces_eb (int lev,
+                                   amrex::Box const& ccbx,
+                                   AMREX_D_DECL(amrex::Box const& ubx,
+                                                amrex::Box const& vbx,
+                                                amrex::Box const& wbx),
+                                   AMREX_D_DECL(amrex::Array4<amrex::Real> const& u,
+                                                amrex::Array4<amrex::Real> const& v,
+                                                amrex::Array4<amrex::Real> const& w),
+                                   amrex::Array4<amrex::Real const> const& vcc,
+                                   amrex::Array4<amrex::Real const> const& f,
+                                   amrex::Array4<amrex::EBCellFlag const> const& flag,
+                                   AMREX_D_DECL(amrex::Array4<amrex::Real const> const& fcx,
+                                                amrex::Array4<amrex::Real const> const& fcy,
+                                                amrex::Array4<amrex::Real const> const& fcz),
+                                   amrex::Array4<amrex::Real const> const& ccc,
+                                   amrex::Vector<amrex::BCRec> const& h_bcrec,
+                                                 amrex::BCRec  const* d_bcrec,
+                                   amrex::Vector<amrex::Geometry> geom,
+                                   amrex::Real m_dt);
+
     void compute_godunov_advection_eb (int lev, amrex::Box const& bx, int ncomp,
                                        AMREX_D_DECL(amrex::Array4<amrex::Real> const& fx,
                                                     amrex::Array4<amrex::Real> const& fy,

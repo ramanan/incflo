@@ -44,7 +44,10 @@ incflo::compute_convective_term (Vector<MultiFab*> const& conv_u,
         //    returned from this call are on face CENTROIDS
         if (m_use_godunov) {
             godunov::predict_godunov(lev, time, AMREX_D_DECL(*u_mac[lev], *v_mac[lev], *w_mac[lev]), *vel[lev], *vel_forces[lev],
-                                     get_velocity_bcrec(), get_velocity_bcrec_device_ptr(), 
+                                     get_velocity_bcrec(), get_velocity_bcrec_device_ptr(),
+#ifdef AMREX_USE_EB
+                                     ebfact,
+#endif
                                      Geom(), l_dt, m_godunov_ppm, m_godunov_use_forces_in_trans);
         } else {
 

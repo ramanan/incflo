@@ -427,7 +427,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 
                    qpls = amrex::max(amrex::min(qpls, cc_qmax), cc_qmin);
 
-                   //Adding tracer_force
+                   //Adding trans_force
                    if (fq) {
                        qpls += 0.5*m_dt*fq(i  ,j,k,n);
                    }
@@ -452,6 +452,9 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                                               AMREX_D_DECL(domain_ilo, domain_jlo, domain_klo),
                                               AMREX_D_DECL(domain_ihi, domain_jhi, domain_khi));
 
+                   //Adding temporal term with the normal derivative to the face
+                   temp_u = -0.5*umac(i-1,j,k)*m_dt;
+
 #if (AMREX_SPACEDIM == 3)    
                    Real qmns = q(i-1,j,k,n) + (delta_x + temp_u) * slopes_eb_lo[0]
                                             + (delta_y         ) * slopes_eb_lo[1]
@@ -462,7 +465,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 #endif
                    qmns = amrex::max(amrex::min(qmns, cc_qmax), cc_qmin);
 
-                   //Adding tracer_force
+                   //Adding trans_force
                    if (fq) {
                        qmns += 0.5*m_dt*fq(i-1,j,k,n);
                    }
@@ -560,7 +563,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 #endif
                    qpls = amrex::max(amrex::min(qpls, cc_qmax), cc_qmin);
     
-                   //Adding tracer_force
+                   //Adding trans_force
                    if (fq) {
                        qpls += 0.5*m_dt*fq(i,j  ,k,n);
                    }
@@ -595,7 +598,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 #endif
                    qmns = amrex::max(amrex::min(qmns, cc_qmax), cc_qmin);
 
-                   //Adding tracer_force
+                   //Adding trans_force
                    if (fq) {
                        qmns += 0.5*m_dt*fq(i,j-1,k,n);
                    }
@@ -773,7 +776,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 
                qpls = amrex::max(amrex::min(qpls, cc_qmax), cc_qmin);
 
-               //Adding tracer_force
+               //Adding trans_force
                if (fq) {
                    qpls += 0.5*m_dt*fq(i  ,j,k,n);
                }   
@@ -793,6 +796,9 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                // Compute slopes of component "n" of q
                const auto& slopes_eb_lo = amrex_calc_slopes_eb(i-1,j,k,n,q,ccc,flag);
 
+               //Adding temporal term with the normal derivative to the face
+               temp_u = -0.5*umac(i-1,j,k)*m_dt;
+
 #if (AMREX_SPACEDIM == 3)
                Real qmns = q(i-1,j,k,n) + (delta_x + temp_u) * slopes_eb_lo[0]
                                         + (delta_y         ) * slopes_eb_lo[1]
@@ -803,7 +809,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 #endif
                qmns = amrex::max(amrex::min(qmns, cc_qmax), cc_qmin);
 
-               //Adding tracer_force
+               //Adding trans_force
                if (fq) {
                    qmns += 0.5*m_dt*fq(i-1,j,k,n);
                }
@@ -856,6 +862,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                // Compute slopes of component "n" of q
                const auto& slopes_eb_hi = amrex_calc_slopes_eb(i,j,k,n,q,ccc,flag);
 
+               //Adding temporal term with the normal derivative to the face 
                Real temp_v = -0.5*vmac(i,j,k)*m_dt;
 
 #if (AMREX_SPACEDIM == 3)
@@ -868,7 +875,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 #endif
                qpls = amrex::max(amrex::min(qpls, cc_qmax), cc_qmin);
 
-               //Adding tracer_force
+               //Adding trans_force
                if (fq) {
                    qpls += 0.5*m_dt*fq(i,j  ,k,n);
                }
@@ -888,6 +895,9 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                // Compute slopes of component "n" of q
                const auto& slopes_eb_lo = amrex_calc_slopes_eb(i,j-1,k,n,q,ccc,flag);
 
+               //Adding temporal term with the normal derivative to the face 
+               temp_v = -0.5*vmac(i,j-1,k)*m_dt;
+
 #if (AMREX_SPACEDIM == 3)
                Real qmns = q(i,j-1,k,n) + (delta_x         ) * slopes_eb_lo[0]
                                         + (delta_y + temp_v) * slopes_eb_lo[1]
@@ -898,7 +908,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 #endif
                qmns = amrex::max(amrex::min(qmns, cc_qmax), cc_qmin);
 
-               //Adding tracer_force
+               //Adding trans_force
                if (fq) {
                    qmns += 0.5*m_dt*fq(i,j-1,k,n);
                }
@@ -969,6 +979,9 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 
                 // Compute slopes of component "n" of q
                 const auto& slopes_eb_lo = amrex_calc_slopes_eb(i,j,k-1,n,q,ccc,flag);
+
+                //Adding temporal term with the normal derivative to the face
+                Real temp_w = -0.5*wmac(i,j,k-1)*m_dt;
 
                 Real qmns = q(i,j,k-1,n) + (delta_x         ) * slopes_eb_lo[0]
                                          + (delta_y         ) * slopes_eb_lo[1]
