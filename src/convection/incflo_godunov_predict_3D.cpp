@@ -15,6 +15,13 @@ void godunov::predict_godunov (int lev, Real time, MultiFab& u_mac, MultiFab& v_
                                Vector<Geometry> geom, Real l_dt, 
                                bool use_ppm, bool use_forces_in_trans)
 {
+
+#ifdef AMREX_USE_EB
+    auto const& flags = ebfact->getMultiEBCellFlagFab();
+    auto const& fcent = ebfact->getFaceCent();
+    auto const& ccent = ebfact->getCentroid();
+#endif
+
     Box const& domain = geom[lev].Domain();
     const Real* dx    = geom[lev].CellSize();
 
@@ -37,53 +44,77 @@ void godunov::predict_godunov (int lev, Real time, MultiFab& u_mac, MultiFab& v_
             Array4<Real> const& a_wmac = w_mac.array(mfi);
             Array4<Real const> const& a_vel = vel.const_array(mfi);
             Array4<Real const> const& a_f = vel_forces.const_array(mfi);
-
-            scratch.resize(bxg1, ncomp*12+3);
-//            Elixir eli = scratch.elixir(); // not needed because of streamSynchronize later
-            Real* p = scratch.dataPtr();
-
-            Array4<Real> Imx = makeArray4(p,bxg1,ncomp);
-            p +=         Imx.size();
-            Array4<Real> Ipx = makeArray4(p,bxg1,ncomp);
-            p +=         Ipx.size();
-            Array4<Real> Imy = makeArray4(p,bxg1,ncomp);
-            p +=         Imy.size();
-            Array4<Real> Ipy = makeArray4(p,bxg1,ncomp);
-            p +=         Ipy.size();
-            Array4<Real> Imz = makeArray4(p,bxg1,ncomp);
-            p +=         Imz.size();
-            Array4<Real> Ipz = makeArray4(p,bxg1,ncomp);
-            p +=         Ipz.size();
-            Array4<Real> u_ad = makeArray4(p,Box(bx).grow(1,1).grow(2,1).surroundingNodes(0),1);
-            p +=         u_ad.size();
-            Array4<Real> v_ad = makeArray4(p,Box(bx).grow(0,1).grow(2,1).surroundingNodes(1),1);
-            p +=         v_ad.size();
-            Array4<Real> w_ad = makeArray4(p,Box(bx).grow(0,1).grow(1,1).surroundingNodes(2),1);
-            p +=         w_ad.size();
-
-            if (use_ppm)
-                godunov::predict_ppm (lev, bxg1, AMREX_SPACEDIM, Imx, Imy, Imz, Ipx, Ipy, Ipz, a_vel, a_vel,
-                                      geom, l_dt, d_bcrec);
-            else
-            {
-                godunov::predict_plm_x (lev, bx, AMREX_SPACEDIM, Imx, Ipx, a_vel, a_vel,
-                                        geom, l_dt, h_bcrec, d_bcrec);
-                godunov::predict_plm_y (lev, bx, AMREX_SPACEDIM, Imy, Ipy, a_vel, a_vel,
-                                        geom, l_dt, h_bcrec, d_bcrec);
-                godunov::predict_plm_z (lev, bx, AMREX_SPACEDIM, Imz, Ipz, a_vel, a_vel,
-                                        geom, l_dt, h_bcrec, d_bcrec);
+#ifdef AMREX_USE_EB
+            EBCellFlagFab const& flagfab = flags[mfi];
+            Array4<EBCellFlag const> const& flagarr = flagfab.const_array();
+            auto const typ = flagfab.getType(amrex::grow(bx,2));
+            if (typ == FabType::covered)
+            {  
+                amrex::ParallelFor(xbx, ybx, zbx,
+                [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept { a_umac(i,j,k) = 0.0; },
+                [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept { a_vmac(i,j,k) = 0.0; },
+                [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept { a_wmac(i,j,k) = 0.0; });
             }
-
-            make_trans_velocities(lev, Box(u_ad), Box(v_ad), Box(w_ad),
-                                  u_ad, v_ad, w_ad,
-                                  Imx, Imy, Imz, Ipx, Ipy, Ipz, a_vel, a_f, 
-                                  domain, l_dt, d_bcrec, use_forces_in_trans);
-
-            predict_godunov_on_box(lev, bx, ncomp, xbx, ybx, zbx, a_umac, a_vmac, a_wmac,
-                                   a_vel, u_ad, v_ad, w_ad, Imx, Imy, Imz, Ipx, Ipy, Ipz, a_f, 
-                                   domain, dx, l_dt, d_bcrec, use_forces_in_trans, p);
-
-            Gpu::streamSynchronize();  // otherwise we might be using too much memory
+            else if (typ == FabType::singlevalued)
+            {   
+                AMREX_D_TERM(Array4<Real const> const& fcx = fcent[0]->const_array(mfi);,
+                             Array4<Real const> const& fcy = fcent[1]->const_array(mfi);,
+                             Array4<Real const> const& fcz = fcent[2]->const_array(mfi););
+                Array4<Real const> const& ccc = ccent.const_array(mfi);
+                godunov::predict_vels_on_faces_eb(lev,bx,xbx,ybx,zbx,
+                                                  a_umac,a_vmac,a_wmac,a_vel,a_f,flagarr,fcx,fcy,fcz,ccc,
+                                                  h_bcrec,d_bcrec,geom,l_dt);
+            }
+            else
+#endif
+            {
+                scratch.resize(bxg1, ncomp*12+3);
+    //            Elixir eli = scratch.elixir(); // not needed because of streamSynchronize later
+                Real* p = scratch.dataPtr();
+    
+                Array4<Real> Imx = makeArray4(p,bxg1,ncomp);
+                p +=         Imx.size();
+                Array4<Real> Ipx = makeArray4(p,bxg1,ncomp);
+                p +=         Ipx.size();
+                Array4<Real> Imy = makeArray4(p,bxg1,ncomp);
+                p +=         Imy.size();
+                Array4<Real> Ipy = makeArray4(p,bxg1,ncomp);
+                p +=         Ipy.size();
+                Array4<Real> Imz = makeArray4(p,bxg1,ncomp);
+                p +=         Imz.size();
+                Array4<Real> Ipz = makeArray4(p,bxg1,ncomp);
+                p +=         Ipz.size();
+                Array4<Real> u_ad = makeArray4(p,Box(bx).grow(1,1).grow(2,1).surroundingNodes(0),1);
+                p +=         u_ad.size();
+                Array4<Real> v_ad = makeArray4(p,Box(bx).grow(0,1).grow(2,1).surroundingNodes(1),1);
+                p +=         v_ad.size();
+                Array4<Real> w_ad = makeArray4(p,Box(bx).grow(0,1).grow(1,1).surroundingNodes(2),1);
+                p +=         w_ad.size();
+    
+                if (use_ppm)
+                    godunov::predict_ppm (lev, bxg1, AMREX_SPACEDIM, Imx, Imy, Imz, Ipx, Ipy, Ipz, a_vel, a_vel,
+                                          geom, l_dt, d_bcrec);
+                else
+                {
+                    godunov::predict_plm_x (lev, bx, AMREX_SPACEDIM, Imx, Ipx, a_vel, a_vel,
+                                            geom, l_dt, h_bcrec, d_bcrec);
+                    godunov::predict_plm_y (lev, bx, AMREX_SPACEDIM, Imy, Ipy, a_vel, a_vel,
+                                            geom, l_dt, h_bcrec, d_bcrec);
+                    godunov::predict_plm_z (lev, bx, AMREX_SPACEDIM, Imz, Ipz, a_vel, a_vel,
+                                            geom, l_dt, h_bcrec, d_bcrec);
+                }
+    
+                make_trans_velocities(lev, Box(u_ad), Box(v_ad), Box(w_ad),
+                                      u_ad, v_ad, w_ad,
+                                      Imx, Imy, Imz, Ipx, Ipy, Ipz, a_vel, a_f, 
+                                      domain, l_dt, d_bcrec, use_forces_in_trans);
+    
+                predict_godunov_on_box(lev, bx, ncomp, xbx, ybx, zbx, a_umac, a_vmac, a_wmac,
+                                       a_vel, u_ad, v_ad, w_ad, Imx, Imy, Imz, Ipx, Ipy, Ipz, a_f, 
+                                       domain, dx, l_dt, d_bcrec, use_forces_in_trans, p);
+    
+                Gpu::streamSynchronize();  // otherwise we might be using too much memory
+            }
         }
     }
 }
