@@ -35,7 +35,7 @@ incflo.use_godunov      =   true
 #¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨#
 #        ADAPTIVE MESH REFINEMENT       #
 #.......................................#
-amr.n_cell              =   96 32       # Grid cells at coarsest AMRlevel
+amr.n_cell              =   32 96       # Grid cells at coarsest AMRlevel
 amr.max_level           =   0           # Max AMR level in hierarchy 
 amr.grid_eff            =   0.7 
 amr.n_error_buf         =   8
@@ -47,33 +47,33 @@ amr.max_grid_size_z     =   1024
 #              GEOMETRY                 #
 #.......................................#
 geometry.prob_lo        =   0.  0.      # Lo corner coordinates
-geometry.prob_hi        =   1.2 0.4     # Hi corner coordinates
+geometry.prob_hi        =   0.4 1.2     # Hi corner coordinates
 geometry.is_periodic    =   0   0       # Periodicity x y z (0/1)
 
 # Boundary conditions
-ylo.type                =   "nsw"
-ylo.velocity            =   0.  0.  0.
-yhi.type                =   "nsw"
-yhi.velocity            =   0.  0.  0.
+xlo.type                =   "nsw"
+xlo.velocity            =   0.  0.  0.
+xhi.type                =   "nsw"
+xhi.velocity            =   0.  0.  0.
 
-xlo.type                =   "mi"
-xlo.velocity            =   1.  0.  0.
-xlo.tracer              =   1.
-xhi.type                =   "po"
-xhi.pressure            =   0.0
+ylo.type                =   "mi"
+ylo.velocity            =   0.  1.  0.
+ylo.tracer              =   1.
+yhi.type                =   "po"
+yhi.pressure            =   0.0
 
 # Add cylinder
 incflo.geometry         = "sphere"
 sphere.internal_flow    = false
 sphere.radius           = 0.05000001
-sphere.center           = 0.15  0.2 0.0
+sphere.center           = 0.2  0.15 0.0
 
 #¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨#
 #           INITIAL CONDITIONS          #
 #.......................................#
-incflo.probtype         =   31
-incflo.ic_u             =   1.0         #
-incflo.ic_v             =   0.0         #
+incflo.probtype         =   322
+incflo.ic_u             =   0.0         #
+incflo.ic_v             =   1.0         #
 incflo.ic_p             =   0.0         #
 
 #¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨#
