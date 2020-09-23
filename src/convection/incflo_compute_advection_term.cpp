@@ -184,25 +184,25 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
 #endif
 //        Elixir eli = tmpfab.elixir();
 
-        Array4<Real> scratch = tmpfab.array(0);
-        Array4<Real> dUdt_tmp = tmpfab.array(nmaxcomp*AMREX_SPACEDIM);
-
 #ifdef AMREX_USE_EB 
         if (!regular)
         {
             Box tmpbox = amrex::surroundingNodes(bx);
-            int tmpcomp = AMREX_SPACEDIM*AMREX_SPACEDIM;
+            int tmpcomp = nmaxcomp*3;
             Box gbx = bx; 
             gbx.grow(2);
             tmpbox.grow(3);
             tmpcomp += AMREX_SPACEDIM;
 
-            FArrayBox tmpfab(tmpbox, tmpcomp);
-            Elixir eli = tmpfab.elixir();
+            FArrayBox tmpfab_eb(tmpbox, tmpcomp);
+            Elixir eli = tmpfab_eb.elixir();
 
-            AMREX_D_TERM(Array4<Real> fx = tmpfab.array(0);,
-                         Array4<Real> fy = tmpfab.array(nmaxcomp);,
-                         Array4<Real> fz = tmpfab.array(nmaxcomp*2););
+            AMREX_D_TERM(Array4<Real> fx = tmpfab_eb.array(0);,
+                         Array4<Real> fy = tmpfab_eb.array(nmaxcomp);,
+                         Array4<Real> fz = tmpfab_eb.array(nmaxcomp*2););
+
+            Array4<Real> scratch = tmpfab_eb.array(0);
+            Array4<Real> dUdt_tmp = tmpfab_eb.array(nmaxcomp*3);
 
             godunov::compute_godunov_advection_eb(lev, gbx, AMREX_SPACEDIM,
                                                   AMREX_D_DECL(fx, fy, fz), vel,
@@ -279,7 +279,7 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
     else
     {
         Box tmpbox = amrex::surroundingNodes(bx);
-        int tmpcomp = nmaxcomp*AMREX_SPACEDIM;
+        int tmpcomp = nmaxcomp*3;
 #ifdef AMREX_USE_EB
         Box gbx = bx;
         if (!regular) {
@@ -300,7 +300,7 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
         if (!regular)
         {
             Array4<Real> scratch = tmpfab.array(0);
-            Array4<Real> dUdt_tmp = tmpfab.array(nmaxcomp*AMREX_SPACEDIM);
+            Array4<Real> dUdt_tmp = tmpfab.array(nmaxcomp*3);
 
             // velocity
             mol::compute_convective_fluxes_eb(lev, gbx, AMREX_SPACEDIM,
