@@ -531,7 +531,12 @@ private:
         return (m_use_godunov) ? 3 : 2;
     }
 
-    int nghost_force () const { return (m_use_godunov) ? 1 : 0; }
+    int nghost_force () const { 
+#ifdef AMREX_USE_EB
+        if (!EBFactory(0).isAllRegular()) return (m_use_godunov) ? 3 : 0;
+#endif 
+        return (m_use_godunov) ? 1 : 0;
+    }
 
     int nghost_mac () const {
 #ifdef AMREX_USE_EB

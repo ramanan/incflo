@@ -232,7 +232,7 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
             if (m_advect_tracer) {
                 godunov::compute_godunov_advection_eb(lev, gbx, m_ntrac,
                                                       AMREX_D_DECL(fx, fy, fz), rhotrac,
-                                                      AMREX_D_DECL(umac, vmac, wmac), {},
+                                                      AMREX_D_DECL(umac, vmac, wmac), ftra,
                                                       get_tracer_bcrec().data(),
                                                       get_tracer_bcrec_device_ptr(),
                                                       flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, Geom(), m_dt);
