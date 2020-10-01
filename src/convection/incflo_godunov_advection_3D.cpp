@@ -556,7 +556,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
         [d_bcrec,q,ccc,flag,umac,small_vel,fx,
         AMREX_D_DECL(domain_ilo,domain_jlo,domain_klo),
         AMREX_D_DECL(domain_ihi,domain_jhi,domain_khi),
-        AMREX_D_DECL(fcx,fcy,fcz),m_dt,fq,vmac]
+        AMREX_D_DECL(fcx,fcy,fcz),m_dt,fq,vmac,wmac]
         AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
         {
 
@@ -623,10 +623,17 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                    if (fq) {
                        qpls += 0.5*m_dt*fq(i  ,j,k,n);
                    }
-
+#if (AMREX_SPACEDIM == 3)
                    //Adding transverse derivative
                    qpls += - (0.25*m_dt)*(vmac(i,j+1,k  ) + vmac(i,j,k))*
                                               (delta_y * slopes_eb_hi[1]);
+                   qpls += - (0.25*m_dt)*(wmac(i,j,k+1  ) + wmac(i,j,k))*
+                                              (delta_z * slopes_eb_hi[2]);
+#else
+                   //Adding transverse derivative
+                   qpls += - (0.25*m_dt)*(vmac(i,j+1,k  ) + vmac(i,j,k))*
+                                              (delta_y * slopes_eb_hi[1]);
+#endif
     
                    AMREX_D_TERM(xc = ccc(i-1,j,k,0);, // centroid of cell (i-1,j,k)
                                 yc = ccc(i-1,j,k,1);,
@@ -662,9 +669,17 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                        qmns += 0.5*m_dt*fq(i-1,j,k,n);
                    }
 
+#if (AMREX_SPACEDIM == 3)
                    //Adding transverse derivative
                    qmns += - (0.25*m_dt)*(vmac(i-1,j+1,k  ) + vmac(i-1,j,k)) *
                                                    (delta_y * slopes_eb_lo[1]);
+                   qmns += - (0.25*m_dt)*(wmac(i-1,j  ,k+1) + wmac(i-1,j,k)) *
+                                                   (delta_z * slopes_eb_lo[2]);
+#else
+                   //Adding transverse derivative
+                   qmns += - (0.25*m_dt)*(vmac(i-1,j+1,k  ) + vmac(i-1,j,k)) *
+                                                   (delta_y * slopes_eb_lo[1]);
+#endif
 
                    if (umac(i,j,k) > small_vel) {
                        qs = qmns;
@@ -689,7 +704,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
         [d_bcrec,q,ccc,flag,vmac,small_vel,fy,
          AMREX_D_DECL(domain_ilo,domain_jlo,domain_klo),
          AMREX_D_DECL(domain_ihi,domain_jhi,domain_khi),
-         AMREX_D_DECL(fcx,fcy,fcz),m_dt,fq,umac]
+         AMREX_D_DECL(fcx,fcy,fcz),m_dt,fq,umac,wmac]
         AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
         {
             Real qs;
@@ -760,9 +775,17 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                        qpls += 0.5*m_dt*fq(i,j  ,k,n);
                    }
 
+#if (AMREX_SPACEDIM == 3)
                    //Adding transverse derivative
                    qpls += - (0.25*m_dt)*(umac(i+1,j,k) + umac(i,j,k))*
                                               (delta_x * slopes_eb_hi[0]);
+                   qpls += - (0.25*m_dt)*(wmac(i,j,k+1) + wmac(i,j,k))*
+                                              (delta_z * slopes_eb_hi[2]);
+#else
+                   //Adding transverse derivative
+                   qpls += - (0.25*m_dt)*(umac(i+1,j,k) + umac(i,j,k))*
+                                              (delta_x * slopes_eb_hi[0]);
+#endif
 
                    AMREX_D_TERM(xc = ccc(i,j-1,k,0);, // centroid of cell (i-1,j,k)
                                 yc = ccc(i,j-1,k,1);,
@@ -795,9 +818,17 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                        qmns += 0.5*m_dt*fq(i,j-1,k,n);
                    }
 
+#if (AMREX_SPACEDIM == 3)
                    //Adding transverse derivative
                    qmns += - (0.25*m_dt)*(umac(i+1,j-1,k) + umac(i,j-1,k))*
                                               (delta_x * slopes_eb_lo[0]);
+                   qmns += - (0.25*m_dt)*(wmac(i,j-1,k+1) + wmac(i,j-1,k))*
+                                              (delta_z * slopes_eb_lo[2]);
+#else
+                   //Adding transverse derivative
+                   qmns += - (0.25*m_dt)*(umac(i+1,j-1,k) + umac(i,j-1,k))*
+                                              (delta_x * slopes_eb_lo[0]);
+#endif
 
                     if (vmac(i,j,k) > small_vel) {
                         qs = qmns;
@@ -823,7 +854,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
         [d_bcrec,q,ccc,flag,wmac,small_vel,fz,
          domain_ilo,domain_jlo,domain_klo,
          domain_ihi,domain_jhi,domain_khi,
-         fcx,fcy,fcz,m_dt,fq]
+         fcx,fcy,fcz,m_dt,fq,umac,vmac]
         AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
         {
             if (flag(i,j,k).isConnected(0,0,-1)) {
@@ -878,6 +909,17 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                                              - (delta_z + temp_w) * slopes_eb_hi[2];
      
                     qpls = amrex::max(amrex::min(qpls, cc_qmax), cc_qmin);
+
+                    //Adding trans_force
+                    if (fq) {
+                        qpls += 0.5*m_dt*fq(i,j,k,n);
+                    }
+ 
+                    //Adding transverse derivative
+                    qpls += - (0.25*m_dt)*(umac(i+1,j,k) + umac(i,j,k))*
+                                               (delta_x * slopes_eb_hi[0]);
+                    qpls += - (0.25*m_dt)*(vmac(i,j+1,k) + vmac(i,j,k))*
+                                               (delta_y * slopes_eb_hi[1]);
      
                     xc = ccc(i,j,k-1,0); // centroid of cell (i,j,k-1)
                     yc = ccc(i,j,k-1,1);
@@ -906,8 +948,13 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 
                     if (fq) {
                         qmns += 0.5*m_dt*fq(i,j,k-1,n);
-                        qpls += 0.5*m_dt*fq(i,j,k  ,n);
                     }
+
+                    //Adding transverse derivative
+                    qmns += - (0.25*m_dt)*(umac(i+1,j,k-1) + umac(i,j,k-1))*
+                                               (delta_x * slopes_eb_lo[0]);
+                    qmns += - (0.25*m_dt)*(vmac(i,j+1,k-1) + vmac(i,j,k-1))*
+                                               (delta_y * slopes_eb_lo[1]);
 
                     if (wmac(i,j,k) > small_vel) {
                         qs = qmns;
