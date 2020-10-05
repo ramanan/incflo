@@ -73,7 +73,7 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
         [u,vcc,flag,ccc,d_bcrec,
          AMREX_D_DECL(fcx,fcy,fcz),
          AMREX_D_DECL(domain_ilo,domain_jlo,domain_klo),
-         AMREX_D_DECL(domain_ihi,domain_jhi,domain_khi),m_dt,f,v]
+         AMREX_D_DECL(domain_ihi,domain_jhi,domain_khi),m_dt,f]
         AMREX_GPU_DEVICE (int i, int j, int k) noexcept
         {
             Real u_val(0);
@@ -124,7 +124,7 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                                    + (delta_y         ) * slopes_eb_hi[1]
                                    + (delta_z         ) * slopes_eb_hi[2];
 #else
-               Real upls = vcc_pls - (delta_x         ) * slopes_eb_hi[0]
+               Real upls = vcc_pls - (delta_x + temp_u) * slopes_eb_hi[0]
                                    + (delta_y         ) * slopes_eb_hi[1];
 #endif
                upls = amrex::max(amrex::min(upls, cc_umax), cc_umin);
@@ -133,9 +133,15 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                if (f) {
                    upls += 0.5*m_dt*f(i  ,j,k,0);
                }
- 
+
+#if (AMREX_SPACEDIM == 3)
                //Adding transverse derivative
                upls += - (0.5*m_dt)*vcc(i,j,k,1)*(delta_y * slopes_eb_hi[1]);
+               upls += - (0.5*m_dt)*vcc(i,j,k,2)*(delta_z * slopes_eb_hi[2]);
+#else
+               //Adding transverse derivative
+               upls += - (0.5*m_dt)*vcc(i,j,k,1)*(delta_y * slopes_eb_hi[1]);
+#endif
 
                AMREX_D_TERM(delta_x = 0.5 - ccc(i-1,j,k,0);,
                             delta_y = yf  - ccc(i-1,j,k,1);,
@@ -167,8 +173,14 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                    umns += 0.5*m_dt*f(i-1,j,k,0);
                }
 
+#if (AMREX_SPACEDIM == 3)
                //Adding transverse derivative
                umns += - (0.5*m_dt)*vcc(i-1,j,k,1)*(delta_y * slopes_eb_lo[1]);
+               umns += - (0.5*m_dt)*vcc(i-1,j,k,2)*(delta_z * slopes_eb_lo[2]);
+#else
+               //Adding transverse derivative
+               umns += - (0.5*m_dt)*vcc(i-1,j,k,1)*(delta_y * slopes_eb_lo[1]);
+#endif
 
                if ( umns >= 0.0 or upls <= 0.0 ) {
                   Real avg = 0.5 * ( upls + umns );
@@ -194,7 +206,7 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
     else
     {
         amrex::ParallelFor(Box(ubx),
-        [u,vcc,flag,fcx,ccc,m_dt,f,v]
+        [u,vcc,flag,fcx,ccc,m_dt,f]
         AMREX_GPU_DEVICE (int i, int j, int k) noexcept
         {
             Real u_val(0);
@@ -223,12 +235,12 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                Real temp_u = -0.5*vcc(i,j,k,0)*m_dt;
 
 #if (AMREX_SPACEDIM == 3)
-               Real upls = vcc_pls - delta_x * slopes_eb_hi[0]
-                                   + delta_y * slopes_eb_hi[1]
-                                   + delta_z * slopes_eb_hi[2];
+               Real upls = vcc_pls - (delta_x + temp_u) * slopes_eb_hi[0]
+                                   + (delta_y         ) * slopes_eb_hi[1]
+                                   + (delta_z         ) * slopes_eb_hi[2];
 #else
-               Real upls = vcc_pls - delta_x * slopes_eb_hi[0]
-                                   + delta_y * slopes_eb_hi[1];
+               Real upls = vcc_pls - (delta_x + temp_u) * slopes_eb_hi[0]
+                                   + (delta_y         ) * slopes_eb_hi[1];
 #endif
                upls = amrex::max(amrex::min(upls, cc_umax), cc_umin);
 
@@ -237,8 +249,14 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                    upls += 0.5*m_dt*f(i  ,j,k,0);
                }
 
+#if (AMREX_SPACEDIM == 3)
                //Adding transverse derivative
                upls += - (0.5*m_dt)*vcc(i,j,k,1)*(delta_y * slopes_eb_hi[1]);
+               upls += - (0.5*m_dt)*vcc(i,j,k,2)*(delta_z * slopes_eb_hi[2]);
+#else
+               //Adding transverse derivative
+               upls += - (0.5*m_dt)*vcc(i,j,k,1)*(delta_y * slopes_eb_hi[1]);
+#endif
 
                AMREX_D_TERM(delta_x = 0.5 - ccc(i-1,j,k,0);,
                             delta_y = yf  - ccc(i-1,j,k,1);,
@@ -251,12 +269,12 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                temp_u = -0.5*vcc(i-1,j,k,0)*m_dt;
 
 #if (AMREX_SPACEDIM == 3)
-               Real umns = vcc_mns + delta_x * slopes_eb_lo[0]
-                                   + delta_y * slopes_eb_lo[1]
-                                   + delta_z * slopes_eb_lo[2];
+               Real umns = vcc_mns + (delta_x + temp_u) * slopes_eb_lo[0]
+                                   + (delta_y         ) * slopes_eb_lo[1]
+                                   + (delta_z         ) * slopes_eb_lo[2];
 #else
-               Real umns = vcc_mns + delta_x * slopes_eb_lo[0]
-                                   + delta_y * slopes_eb_lo[1];
+               Real umns = vcc_mns + (delta_x + temp_u) * slopes_eb_lo[0]
+                                   + (delta_y         ) * slopes_eb_lo[1];
 #endif
                umns = amrex::max(amrex::min(umns, cc_umax), cc_umin);
 
@@ -265,8 +283,14 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                    umns += 0.5*m_dt*f(i-1,j,k,0);
                }
 
+#if (AMREX_SPACEDIM == 3)
                //Adding transverse derivative
                umns += - (0.5*m_dt)*vcc(i-1,j,k,1)*(delta_y * slopes_eb_lo[1]);
+               umns += - (0.5*m_dt)*vcc(i-1,j,k,2)*(delta_z * slopes_eb_lo[2]);
+#else
+               //Adding transverse derivative
+               umns += - (0.5*m_dt)*vcc(i-1,j,k,1)*(delta_y * slopes_eb_lo[1]);
+#endif
 
                if ( umns >= 0.0 or upls <= 0.0 ) {
                   Real avg = 0.5 * ( upls + umns );
@@ -298,7 +322,7 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
         [v,vcc,flag,ccc,d_bcrec,
          AMREX_D_DECL(fcx,fcy,fcz),
          AMREX_D_DECL(domain_ilo,domain_jlo,domain_klo),
-         AMREX_D_DECL(domain_ihi,domain_jhi,domain_khi),m_dt,f,u]
+         AMREX_D_DECL(domain_ihi,domain_jhi,domain_khi),m_dt,f]
         AMREX_GPU_DEVICE (int i, int j, int k) noexcept
         {
             Real v_val(0);
@@ -361,8 +385,14 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                    vpls += 0.5*m_dt*f(i,j  ,k,1);
                }
 
+#if (AMREX_SPACEDIM == 3)
                //Adding transverse derivative
                vpls += - (0.5*m_dt)*vcc(i,j,k,0)*(delta_x * slopes_eb_hi[0]);
+               vpls += - (0.5*m_dt)*vcc(i,j,k,2)*(delta_z * slopes_eb_hi[2]);
+#else
+               //Adding transverse derivative
+               vpls += - (0.5*m_dt)*vcc(i,j,k,0)*(delta_x * slopes_eb_hi[0]);
+#endif
 
                AMREX_D_TERM(delta_x = xf  - ccc(i,j-1,k,0);,
                             delta_y = 0.5 - ccc(i,j-1,k,1);,
@@ -380,12 +410,12 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                temp_v = -0.5*vcc(i,j-1,k,1)*m_dt;
 
 #if (AMREX_SPACEDIM == 3)
-               Real vmns = vcc_mns + delta_x * slopes_eb_lo[0]
-                                   + delta_y * slopes_eb_lo[1]
-                                   + delta_z * slopes_eb_lo[2];
+               Real vmns = vcc_mns + (delta_x         ) * slopes_eb_lo[0]
+                                   + (delta_y + temp_v) * slopes_eb_lo[1]
+                                   + (delta_z         ) * slopes_eb_lo[2];
 #else
-               Real vmns = vcc_mns + delta_x * slopes_eb_lo[0]
-                                   + delta_y * slopes_eb_lo[1];
+               Real vmns = vcc_mns + (delta_x         ) * slopes_eb_lo[0]
+                                   + (delta_y + temp_v) * slopes_eb_lo[1];
 #endif
 
                vmns = amrex::max(amrex::min(vmns, cc_vmax), cc_vmin);
@@ -395,8 +425,14 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                    vmns += 0.5*m_dt*f(i,j-1,k,1);
                }
 
+#if (AMREX_SPACEDIM == 3)
                //Adding transverse derivative
                vmns += - (0.5*m_dt)*vcc(i,j-1,k,0)*(delta_x * slopes_eb_lo[0]);
+               vmns += - (0.5*m_dt)*vcc(i,j-1,k,2)*(delta_z * slopes_eb_lo[2]);
+#else
+               //Adding transverse derivative
+               vmns += - (0.5*m_dt)*vcc(i,j-1,k,0)*(delta_x * slopes_eb_lo[0]);
+#endif
 
                if ( vmns >= 0.0 or vpls <= 0.0 ) {
                   Real avg = 0.5 * ( vpls + vmns );
@@ -423,7 +459,7 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
     else
     {
         amrex::ParallelFor(Box(vbx),
-        [v,vcc,flag,fcy,ccc,m_dt,f,u] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+        [v,vcc,flag,fcy,ccc,m_dt,f] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
         {
             Real v_val(0);
 
@@ -451,12 +487,12 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                Real temp_v = -0.5*vcc(i,j,k,1)*m_dt;
 
 #if (AMREX_SPACEDIM == 3)
-               Real vpls = vcc_pls + delta_x * slopes_eb_hi[0]
-                                   - delta_y * slopes_eb_hi[1]
-                                   + delta_z * slopes_eb_hi[2];
+               Real vpls = vcc_pls + (delta_x         ) * slopes_eb_hi[0]
+                                   - (delta_y + temp_v) * slopes_eb_hi[1]
+                                   + (delta_z         ) * slopes_eb_hi[2];
 #else
-               Real vpls = vcc_pls + delta_x * slopes_eb_hi[0]
-                                   - delta_y * slopes_eb_hi[1];
+               Real vpls = vcc_pls + (delta_x         ) * slopes_eb_hi[0]
+                                   - (delta_y + temp_v) * slopes_eb_hi[1];
 #endif
 
                vpls = amrex::max(amrex::min(vpls, cc_vmax), cc_vmin);
@@ -466,8 +502,15 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                    vpls += 0.5*m_dt*f(i,j  ,k,1);
                }
 
+#if (AMREX_SPACEDIM == 3)
                //Adding transverse derivative
                vpls += - (0.5*m_dt)*vcc(i,j,k,0)*(delta_x * slopes_eb_hi[0]);
+               vpls += - (0.5*m_dt)*vcc(i,j,k,2)*(delta_z * slopes_eb_hi[2]);
+
+#else
+               //Adding transverse derivative
+               vpls += - (0.5*m_dt)*vcc(i,j,k,0)*(delta_x * slopes_eb_hi[0]);
+#endif
 
                AMREX_D_TERM(delta_x = xf  - ccc(i,j-1,k,0);,
                             delta_y = 0.5 - ccc(i,j-1,k,1);,
@@ -480,12 +523,12 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                temp_v = -0.5*vcc(i,j-1,k,1)*m_dt;
 
 #if (AMREX_SPACEDIM == 3)
-               Real vmns = vcc_mns + delta_x * slopes_eb_lo[0]
-                                   + delta_y * slopes_eb_lo[1]
-                                   + delta_z * slopes_eb_lo[2];
+               Real vmns = vcc_mns + (delta_x         ) * slopes_eb_lo[0]
+                                   + (delta_y + temp_v) * slopes_eb_lo[1]
+                                   + (delta_z         ) * slopes_eb_lo[2];
 #else
-               Real vmns = vcc_mns + delta_x * slopes_eb_lo[0]
-                                   + delta_y * slopes_eb_lo[1];
+               Real vmns = vcc_mns + (delta_x         ) * slopes_eb_lo[0]
+                                   + (delta_y + temp_v) * slopes_eb_lo[1];
 #endif
                                           
                vmns = amrex::max(amrex::min(vmns, cc_vmax), cc_vmin);
@@ -495,8 +538,14 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                    vmns += 0.5*m_dt*f(i,j-1,k,1);
                }
 
+#if (AMREX_SPACEDIM == 3)
                //Adding transverse derivative
                vmns += - (0.5*m_dt)*vcc(i,j-1,k,0)*(delta_x * slopes_eb_lo[0]);
+               vmns += - (0.5*m_dt)*vcc(i,j-1,k,2)*(delta_z * slopes_eb_lo[2]);
+#else
+               //Adding transverse derivative
+               vmns += - (0.5*m_dt)*vcc(i,j-1,k,0)*(delta_x * slopes_eb_lo[0]);
+#endif
 
                if ( vmns >= 0.0 or vpls <= 0.0 ) {
                   Real avg = 0.5 * ( vpls + vmns );
@@ -528,7 +577,7 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
         amrex::ParallelFor(Box(wbx),
         [w,vcc,flag,ccc,d_bcrec,
          AMREX_D_DECL(fcx,fcy,fcz),
-         domain_ilo,domain_ihi,domain_jlo,domain_jhi,domain_klo,domain_khi]
+         domain_ilo,domain_ihi,domain_jlo,domain_jhi,domain_klo,domain_khi,m_dt,f]
         AMREX_GPU_DEVICE (int i, int j, int k) noexcept
         {
             Real w_val(0);
@@ -571,11 +620,23 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                                           AMREX_D_DECL(domain_ilo, domain_jlo, domain_klo),
                                           AMREX_D_DECL(domain_ihi, domain_jhi, domain_khi));
 
-               Real wpls = vcc_pls + delta_x * slopes_eb_hi[0]
-                                   + delta_y * slopes_eb_hi[1]
-                                   - delta_z * slopes_eb_hi[2];
+               //Adding temporal term with the normal derivative to the face 
+               Real temp_w = -0.5*vcc(i,j,k,2)*m_dt;
+
+               Real wpls = vcc_pls + (delta_x         ) * slopes_eb_hi[0]
+                                   + (delta_y         ) * slopes_eb_hi[1]
+                                   - (delta_z + temp_w) * slopes_eb_hi[2];
 
                wpls = amrex::max(amrex::min(wpls, cc_wmax), cc_wmin);
+
+               //Adding trans_force
+               if (f) {
+                   wpls += 0.5*m_dt*f(i,j  ,k,2);
+               }
+
+               //Adding transverse derivative
+               wpls += - (0.5*m_dt)*vcc(i,j,k,0)*(delta_x * slopes_eb_hi[0]);
+               wpls += - (0.5*m_dt)*vcc(i,j,k,1)*(delta_y * slopes_eb_hi[1]);
 
                delta_x = xf  - ccc(i,j,k-1,0);
                delta_y = yf  - ccc(i,j,k-1,1);
@@ -589,11 +650,23 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                                           AMREX_D_DECL(domain_ilo, domain_jlo, domain_klo),
                                           AMREX_D_DECL(domain_ihi, domain_jhi, domain_khi));
 
-               Real wmns = vcc_mns + delta_x * slopes_eb_lo[0]
-                                   + delta_y * slopes_eb_lo[1]
-                                   + delta_z * slopes_eb_lo[2];
+               //Adding temporal term with the normal derivative to the face 
+               temp_w = -0.5*vcc(i,j,k-1,2)*m_dt;
+
+               Real wmns = vcc_mns + (delta_x         ) * slopes_eb_lo[0]
+                                   + (delta_y         ) * slopes_eb_lo[1]
+                                   + (delta_z + temp_w) * slopes_eb_lo[2];
 
                wmns = amrex::max(amrex::min(wmns, cc_wmax), cc_wmin);
+
+               //Adding trans_force
+               if (f) {
+                   wmns += 0.5*m_dt*f(i,j  ,k-1,2);
+               }
+
+               //Adding transverse derivative
+               wmns += - (0.5*m_dt)*vcc(i,j,k-1,0)*(delta_x * slopes_eb_hi[0]);
+               wmns += - (0.5*m_dt)*vcc(i,j,k-1,1)*(delta_y * slopes_eb_hi[1]);
 
                if ( wmns >= 0.0 or wpls <= 0.0 ) {
                   Real avg = 0.5 * ( wpls + wmns );
@@ -620,7 +693,7 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
     else
     {
         amrex::ParallelFor(Box(wbx),
-        [w,vcc,flag,fcz,ccc] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+        [w,vcc,flag,fcz,ccc,m_dt,f] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
         {
             Real w_val(0);
 
@@ -642,11 +715,23 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                // Compute slopes of component "2" of vcc
                const auto slopes_eb_hi = amrex_calc_slopes_eb(i,j,k,2,vcc,ccc,flag);
 
-               Real wpls = vcc_pls + delta_x * slopes_eb_hi[0]
-                                   + delta_y * slopes_eb_hi[1]
-                                   - delta_z * slopes_eb_hi[2];
+               //Adding temporal term with the normal derivative to the face 
+               Real temp_w = -0.5*vcc(i,j,k,2)*m_dt;
+
+               Real wpls = vcc_pls + (delta_x         ) * slopes_eb_hi[0]
+                                   + (delta_y         ) * slopes_eb_hi[1]
+                                   - (delta_z + temp_w) * slopes_eb_hi[2];
 
                wpls = amrex::max(amrex::min(wpls, cc_wmax), cc_wmin);
+
+               //Adding trans_force
+               if (f) {
+                   wpls += 0.5*m_dt*f(i,j  ,k,2);
+               }
+
+               //Adding transverse derivative
+               wpls += - (0.5*m_dt)*vcc(i,j,k,0)*(delta_x * slopes_eb_hi[0]);
+               wpls += - (0.5*m_dt)*vcc(i,j,k,1)*(delta_y * slopes_eb_hi[1]);
 
                delta_x = xf  - ccc(i,j,k-1,0);
                delta_y = yf  - ccc(i,j,k-1,1);
@@ -655,11 +740,23 @@ godunov::predict_vels_on_faces_eb (int lev, Box const& ccbx,
                // Compute slopes of component "2" of vcc
                const auto& slopes_eb_lo = amrex_calc_slopes_eb(i,j,k-1,2,vcc,ccc,flag);
 
-               Real wmns = vcc_mns + delta_x * slopes_eb_lo[0]
-                                   + delta_y * slopes_eb_lo[1]
-                                   + delta_z * slopes_eb_lo[2];
+               //Adding temporal term with the normal derivative to the face 
+               temp_w = -0.5*vcc(i,j,k-1,2)*m_dt;
+
+               Real wmns = vcc_mns + (delta_x         ) * slopes_eb_lo[0]
+                                   + (delta_y         ) * slopes_eb_lo[1]
+                                   + (delta_z + temp_w) * slopes_eb_lo[2];
 
                wmns = amrex::max(amrex::min(wmns, cc_wmax), cc_wmin);
+
+               //Adding trans_force
+               if (f) {
+                   wmns += 0.5*m_dt*f(i,j,k-1,2);
+               }
+
+               //Adding transverse derivative
+               wmns += - (0.5*m_dt)*vcc(i,j,k-1,0)*(delta_x * slopes_eb_lo[0]);
+               wmns += - (0.5*m_dt)*vcc(i,j,k-1,1)*(delta_y * slopes_eb_lo[1]);
 
                if ( wmns >= 0.0 or wpls <= 0.0 ) {
                   Real avg = 0.5 * ( wpls + wmns );

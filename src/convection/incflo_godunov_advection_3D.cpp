@@ -803,6 +803,9 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                                               AMREX_D_DECL(domain_ilo, domain_jlo, domain_klo),
                                               AMREX_D_DECL(domain_ihi, domain_jhi, domain_khi));
 
+                   //Adding temporal term with the normal derivative to the face
+                   temp_v = -0.5*vmac(i,j-1,k)*m_dt;
+
 #if (AMREX_SPACEDIM == 3)    
                    Real qmns = q(i,j-1,k,n) + (delta_x         ) * slopes_eb_lo[0]
                                             + (delta_y + temp_v) * slopes_eb_lo[1]
