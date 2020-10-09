@@ -209,7 +209,7 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                                                   AMREX_D_DECL(umac, vmac, wmac), fvel,
                                                   get_velocity_bcrec().data(),
                                                   get_velocity_bcrec_device_ptr(),
-                                                  flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, Geom(), m_dt);
+                                                  flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, Geom(), vel, m_dt);
 
             mol::compute_convective_rate_eb(lev, gbx, AMREX_SPACEDIM, dUdt_tmp, AMREX_D_DECL(fx, fy, fz),
                                             flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());
@@ -222,7 +222,7 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                                                       AMREX_D_DECL(umac, vmac, wmac), {},
                                                       get_density_bcrec().data(),
                                                       get_density_bcrec_device_ptr(),
-                                                      flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, Geom(), m_dt);
+                                                      flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, Geom(), vel, m_dt);
 
                 mol::compute_convective_rate_eb(lev, gbx, 1, dUdt_tmp, AMREX_D_DECL(fx, fy, fz),
                                                 flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());
@@ -235,7 +235,7 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                                                       AMREX_D_DECL(umac, vmac, wmac), ftra,
                                                       get_tracer_bcrec().data(),
                                                       get_tracer_bcrec_device_ptr(),
-                                                      flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, Geom(), m_dt);
+                                                      flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, Geom(), vel, m_dt);
 
                 mol::compute_convective_rate_eb(lev, gbx, m_ntrac, dUdt_tmp, AMREX_D_DECL(fx, fy, fz),
                                                 flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());

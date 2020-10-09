@@ -167,6 +167,7 @@ namespace godunov {
                                                     amrex::Array4<amrex::Real const> const& fcz),
                                        amrex::Array4<amrex::Real const> const& ccc,
                                        amrex::Vector<amrex::Geometry> geom,
+                                       amrex::Array4<amrex::Real const> const& vel_c,
                                        amrex::Real m_dt);
 #endif
 } // namespace godunov
