@@ -499,10 +499,12 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                                                     Array4<Real const> const& fcz),
                                        Array4<Real const> const& ccc,
                                        Vector<Geometry> geom,
+                                       Array4<Real const> const& vel_c,
                                        Real m_dt)
 {
     constexpr Real small_vel = 1.e-10;
 
+    const auto dxinv = geom[lev].InvCellSizeArray();
     const Box& domain_box = geom[lev].Domain();
     AMREX_D_TERM(
         const int domain_ilo = domain_box.smallEnd(0);
@@ -556,7 +558,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
         [d_bcrec,q,ccc,flag,umac,small_vel,fx,
         AMREX_D_DECL(domain_ilo,domain_jlo,domain_klo),
         AMREX_D_DECL(domain_ihi,domain_jhi,domain_khi),
-        AMREX_D_DECL(fcx,fcy,fcz),m_dt,fq,vmac,wmac]
+        AMREX_D_DECL(fcx,fcy,fcz),m_dt,fq,vel_c,dxinv]
         AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
         {
 
@@ -604,7 +606,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                                 Real delta_z = zf  - zc;);
 
                    //Adding temporal term with the normal derivative to the face
-                   Real temp_u = -0.5*umac(i,j,k)*m_dt;
+                   Real temp_u = -0.5*vel_c(i,j,k,0)*m_dt*dxinv[0];
  
 #if (AMREX_SPACEDIM == 3) 
                    Real qpls = q(i  ,j,k,n) - (delta_x + temp_u) * slopes_eb_hi[0]
@@ -625,14 +627,14 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                    }
 #if (AMREX_SPACEDIM == 3)
                    //Adding transverse derivative
-                   qpls += - (0.25*m_dt)*(vmac(i,j+1,k  ) + vmac(i,j,k))*
-                                              (delta_y * slopes_eb_hi[1]);
-                   qpls += - (0.25*m_dt)*(wmac(i,j,k+1  ) + wmac(i,j,k))*
-                                              (delta_z * slopes_eb_hi[2]);
+                   qpls += - (0.5*m_dt)*(vel_c(i,j,k,1))*dxinv[1]*
+                                              (slopes_eb_hi[1]);
+                   qpls += - (0.5*m_dt)*(vel_c(i,j,k,2))*dxinv[2]*
+                                              (slopes_eb_hi[2]);
 #else
                    //Adding transverse derivative
-                   qpls += - (0.25*m_dt)*(vmac(i,j+1,k  ) + vmac(i,j,k))*
-                                              (delta_y * slopes_eb_hi[1]);
+                   qpls += - (0.5*m_dt)*(vel_c(i,j,k,1))*dxinv[1]*
+                                              (slopes_eb_hi[1]);
 #endif
     
                    AMREX_D_TERM(xc = ccc(i-1,j,k,0);, // centroid of cell (i-1,j,k)
@@ -652,7 +654,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                                               AMREX_D_DECL(domain_ihi, domain_jhi, domain_khi));
 
                    //Adding temporal term with the normal derivative to the face
-                   temp_u = -0.5*umac(i-1,j,k)*m_dt;
+                   temp_u = -0.5*vel_c(i-1,j,k,0)*m_dt*dxinv[0];
 
 #if (AMREX_SPACEDIM == 3)    
                    Real qmns = q(i-1,j,k,n) + (delta_x + temp_u) * slopes_eb_lo[0]
@@ -671,14 +673,14 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 
 #if (AMREX_SPACEDIM == 3)
                    //Adding transverse derivative
-                   qmns += - (0.25*m_dt)*(vmac(i-1,j+1,k  ) + vmac(i-1,j,k)) *
-                                                   (delta_y * slopes_eb_lo[1]);
-                   qmns += - (0.25*m_dt)*(wmac(i-1,j  ,k+1) + wmac(i-1,j,k)) *
-                                                   (delta_z * slopes_eb_lo[2]);
+                   qmns += - (0.5*m_dt)*(vel_c(i-1,j,k,1)) * dxinv[1]*
+                                                   (slopes_eb_lo[1]);
+                   qmns += - (0.5*m_dt)*(vel_c(i-1,j,k,2)) * dxinv[2]*
+                                                   (slopes_eb_lo[2]);
 #else
                    //Adding transverse derivative
-                   qmns += - (0.25*m_dt)*(vmac(i-1,j+1,k  ) + vmac(i-1,j,k)) *
-                                                   (delta_y * slopes_eb_lo[1]);
+                   qmns += - (0.5*m_dt)*(vel_c(i-1,j,k,1)) * dxinv[1]*
+                                                   (slopes_eb_lo[1]);
 #endif
 
                    if (umac(i,j,k) > small_vel) {
@@ -704,7 +706,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
         [d_bcrec,q,ccc,flag,vmac,small_vel,fy,
          AMREX_D_DECL(domain_ilo,domain_jlo,domain_klo),
          AMREX_D_DECL(domain_ihi,domain_jhi,domain_khi),
-         AMREX_D_DECL(fcx,fcy,fcz),m_dt,fq,umac,wmac]
+         AMREX_D_DECL(fcx,fcy,fcz),m_dt,fq,vel_c,dxinv]
         AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
         {
             Real qs;
@@ -758,7 +760,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                                               AMREX_D_DECL(domain_ihi, domain_jhi, domain_khi));
 
                    //Adding temporal term with the normal derivative to the face
-                   Real temp_v = -0.5*vmac(i,j,k)*m_dt; 
+                   Real temp_v = -0.5*vel_c(i,j,k,1)*m_dt*dxinv[1]; 
 
 #if (AMREX_SPACEDIM == 3)
                    Real qpls = q(i,j  ,k,n) + (delta_x         ) * slopes_eb_hi[0]
@@ -777,14 +779,14 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 
 #if (AMREX_SPACEDIM == 3)
                    //Adding transverse derivative
-                   qpls += - (0.25*m_dt)*(umac(i+1,j,k) + umac(i,j,k))*
-                                              (delta_x * slopes_eb_hi[0]);
-                   qpls += - (0.25*m_dt)*(wmac(i,j,k+1) + wmac(i,j,k))*
-                                              (delta_z * slopes_eb_hi[2]);
+                   qpls += - (0.5*m_dt)*(vel_c(i,j,k,0))*dxinv[0]*
+                                              (slopes_eb_hi[0]);
+                   qpls += - (0.5*m_dt)*(vel_c(i,j,k,2))*dxinv[2]*
+                                              (slopes_eb_hi[2]);
 #else
                    //Adding transverse derivative
-                   qpls += - (0.25*m_dt)*(umac(i+1,j,k) + umac(i,j,k))*
-                                              (delta_x * slopes_eb_hi[0]);
+                   qpls += - (0.5*m_dt)*(vel_c(i,j,k,0))*dxinv[0]*
+                                              (slopes_eb_hi[0]);
 #endif
 
                    AMREX_D_TERM(xc = ccc(i,j-1,k,0);, // centroid of cell (i-1,j,k)
@@ -804,7 +806,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                                               AMREX_D_DECL(domain_ihi, domain_jhi, domain_khi));
 
                    //Adding temporal term with the normal derivative to the face
-                   temp_v = -0.5*vmac(i,j-1,k)*m_dt;
+                   temp_v = -0.5*vel_c(i,j-1,k,1)*m_dt*dxinv[1];
 
 #if (AMREX_SPACEDIM == 3)    
                    Real qmns = q(i,j-1,k,n) + (delta_x         ) * slopes_eb_lo[0]
@@ -823,14 +825,14 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 
 #if (AMREX_SPACEDIM == 3)
                    //Adding transverse derivative
-                   qmns += - (0.25*m_dt)*(umac(i+1,j-1,k) + umac(i,j-1,k))*
-                                              (delta_x * slopes_eb_lo[0]);
-                   qmns += - (0.25*m_dt)*(wmac(i,j-1,k+1) + wmac(i,j-1,k))*
-                                              (delta_z * slopes_eb_lo[2]);
+                   qmns += - (0.5*m_dt)*(vel_c(i,j-1,k,0))*dxinv[0]*
+                                              (slopes_eb_lo[0]);
+                   qmns += - (0.5*m_dt)*(vel_c(i,j-1,k,2))*dxinv[2]*
+                                              (slopes_eb_lo[2]);
 #else
                    //Adding transverse derivative
-                   qmns += - (0.25*m_dt)*(umac(i+1,j-1,k) + umac(i,j-1,k))*
-                                              (delta_x * slopes_eb_lo[0]);
+                   qmns += - (0.5*m_dt)*(vel_c(i,j-1,k,0))*dxinv[0]*
+                                              (slopes_eb_lo[0]);
 #endif
 
                     if (vmac(i,j,k) > small_vel) {
@@ -857,7 +859,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
         [d_bcrec,q,ccc,flag,wmac,small_vel,fz,
          domain_ilo,domain_jlo,domain_klo,
          domain_ihi,domain_jhi,domain_khi,
-         fcx,fcy,fcz,m_dt,fq,umac,vmac]
+         fcx,fcy,fcz,m_dt,fq,vel_c,dxinv]
         AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
         {
             if (flag(i,j,k).isConnected(0,0,-1)) {
@@ -905,7 +907,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                                                AMREX_D_DECL(domain_ihi, domain_jhi, domain_khi));
  
                     //Adding temporal term with the normal derivative to the face
-                    Real temp_w = -0.5* wmac(i,j,k) * m_dt;
+                    Real temp_w = -0.5* vel_c(i,j,k,2) * m_dt * dxinv[2];
 
                     Real qpls = q(i,j,k  ,n) + (delta_x         ) * slopes_eb_hi[0]
                                              + (delta_y         ) * slopes_eb_hi[1]
@@ -919,10 +921,10 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                     }
  
                     //Adding transverse derivative
-                    qpls += - (0.25*m_dt)*(umac(i+1,j,k) + umac(i,j,k))*
-                                               (delta_x * slopes_eb_hi[0]);
-                    qpls += - (0.25*m_dt)*(vmac(i,j+1,k) + vmac(i,j,k))*
-                                               (delta_y * slopes_eb_hi[1]);
+                    qpls += - (0.5*m_dt)*(vel_c(i,j,k,0))*dxinv[0]*
+                                               (slopes_eb_hi[0]);
+                    qpls += - (0.5*m_dt)*(vel_c(i,j,k,1))*dxinv[1]*
+                                               (slopes_eb_hi[1]);
      
                     xc = ccc(i,j,k-1,0); // centroid of cell (i,j,k-1)
                     yc = ccc(i,j,k-1,1);
@@ -941,7 +943,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                                                AMREX_D_DECL(domain_ihi, domain_jhi, domain_khi));
 
                     //Adding temporal term with the normal derivative to the face
-                    temp_w = -0.5* wmac(i,j,k-1) * m_dt;
+                    temp_w = -0.5* vel_c(i,j,k-1,2) * m_dt * dxinv[2];
 
                     Real qmns = q(i,j,k-1,n) + (delta_x         ) * slopes_eb_lo[0]
                                              + (delta_y         ) * slopes_eb_lo[1]
@@ -954,10 +956,10 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                     }
 
                     //Adding transverse derivative
-                    qmns += - (0.25*m_dt)*(umac(i+1,j,k-1) + umac(i,j,k-1))*
-                                               (delta_x * slopes_eb_lo[0]);
-                    qmns += - (0.25*m_dt)*(vmac(i,j+1,k-1) + vmac(i,j,k-1))*
-                                               (delta_y * slopes_eb_lo[1]);
+                    qmns += - (0.5*m_dt)*(vel_c(i,j,k-1,0))*dxinv[0]*
+                                               (slopes_eb_lo[0]);
+                    qmns += - (0.5*m_dt)*(vel_c(i,j,k-1,1))*dxinv[1]*
+                                               (slopes_eb_lo[1]);
 
                     if (wmac(i,j,k) > small_vel) {
                         qs = qmns;
@@ -983,7 +985,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
         // Predict to x-faces
         // ****************************************************************************
         amrex::ParallelFor(xbx, ncomp,
-        [q,ccc,fcx,flag,umac,small_vel,fx,m_dt,fq,vmac,wmac]
+        [q,ccc,fcx,flag,umac,small_vel,fx,m_dt,fq,vel_c,dxinv]
         AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
         {
            Real qs;
@@ -1008,7 +1010,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                // Compute slopes of component "n" of q
                const auto& slopes_eb_hi = amrex_calc_slopes_eb(i,j,k,n,q,ccc,flag);
 
-               Real temp_u = -0.5*umac(i,j,k)*m_dt;
+               Real temp_u = -0.5*vel_c(i,j,k,0)*m_dt*dxinv[0];
 
 #if (AMREX_SPACEDIM == 3)
                Real qpls = q(i  ,j,k,n) - (delta_x + temp_u) * slopes_eb_hi[0]
@@ -1028,14 +1030,14 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
    
 #if (AMREX_SPACEDIM == 3)
                 //Adding transverse derivative
-                qpls += - (0.25*m_dt)*(vmac(i,j+1,k  ) + vmac(i,j,k))*
-                                           (delta_y * slopes_eb_hi[1]);
-                qpls += - (0.25*m_dt)*(wmac(i,j,k+1  ) + wmac(i,j,k))*
-                                           (delta_z * slopes_eb_hi[2]);
+                qpls += - (0.5*m_dt)*(vel_c(i,j,k,1))*dxinv[1]*
+                                           (slopes_eb_hi[1]);
+                qpls += - (0.5*m_dt)*(vel_c(i,j,k,2))*dxinv[2]*
+                                           (slopes_eb_hi[2]);
 #else
                 //Adding transverse derivative
-                qpls += - (0.25*m_dt)*(vmac(i,j+1,k  ) + vmac(i,j,k))*
-                                           (delta_y * slopes_eb_hi[1]);
+                qpls += - (0.5*m_dt)*(vel_c(i,j,k,1))*dxinv[1]*
+                                           (slopes_eb_hi[1]);
 #endif
 
                AMREX_D_TERM(xc = ccc(i-1,j,k,0);, // centroid of cell (i-1,j,k)
@@ -1050,7 +1052,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                const auto& slopes_eb_lo = amrex_calc_slopes_eb(i-1,j,k,n,q,ccc,flag);
 
                //Adding temporal term with the normal derivative to the face
-               temp_u = -0.5*umac(i-1,j,k)*m_dt;
+               temp_u = -0.5*vel_c(i-1,j,k,0)*m_dt*dxinv[0];
 
 #if (AMREX_SPACEDIM == 3)
                Real qmns = q(i-1,j,k,n) + (delta_x + temp_u) * slopes_eb_lo[0]
@@ -1069,14 +1071,14 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 
 #if (AMREX_SPACEDIM == 3)
                //Adding transverse derivative
-               qmns += - (0.25*m_dt)*(vmac(i-1,j+1,k  ) + vmac(i-1,j,k)) *
-                                               (delta_y * slopes_eb_lo[1]);
-               qmns += - (0.25*m_dt)*(wmac(i-1,j  ,k+1) + wmac(i-1,j,k)) *
-                                               (delta_z * slopes_eb_lo[2]);
+               qmns += - (0.5*m_dt)*(vel_c(i-1,j,k,1)) * dxinv[1] *
+                                               (slopes_eb_lo[1]);
+               qmns += - (0.5*m_dt)*(vel_c(i-1,j,k,2)) * dxinv[2] *
+                                               (slopes_eb_lo[2]);
 #else
                //Adding transverse derivative
-               qmns += - (0.25*m_dt)*(vmac(i-1,j+1,k  ) + vmac(i-1,j,k)) *
-                                               (delta_y * slopes_eb_lo[1]);
+               qmns += - (0.5*m_dt)*(vel_c(i-1,j,k,1)) * dxinv[1] *
+                                               (slopes_eb_lo[1]);
 #endif
 
                if (umac(i,j,k) > small_vel) {
@@ -1098,7 +1100,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
         // Predict to y-faces
         // ****************************************************************************
         amrex::ParallelFor(ybx, ncomp,
-        [q,ccc,fcy,flag,vmac,small_vel,fy,m_dt,fq,umac,wmac]
+        [q,ccc,fcy,flag,vmac,small_vel,fy,m_dt,fq,vel_c,dxinv]
         AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
         {
             Real qs;
@@ -1124,7 +1126,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                const auto& slopes_eb_hi = amrex_calc_slopes_eb(i,j,k,n,q,ccc,flag);
 
                //Adding temporal term with the normal derivative to the face 
-               Real temp_v = -0.5*vmac(i,j,k)*m_dt;
+               Real temp_v = -0.5*vel_c(i,j,k,1)*m_dt*dxinv[1];
 
 #if (AMREX_SPACEDIM == 3)
                Real qpls = q(i,j  ,k,n) + (delta_x         ) * slopes_eb_hi[0]
@@ -1143,14 +1145,14 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 
 #if (AMREX_SPACEDIM == 3)
                //Adding transverse derivative
-               qpls += - (0.25*m_dt)*(umac(i+1,j,k) + umac(i,j,k))*
-                                          (delta_x * slopes_eb_hi[0]);
-               qpls += - (0.25*m_dt)*(wmac(i,j,k+1) + wmac(i,j,k))*
-                                          (delta_z * slopes_eb_hi[2]);
+               qpls += - (0.5*m_dt)*(vel_c(i,j,k,0))*dxinv[0]*
+                                          (slopes_eb_hi[0]);
+               qpls += - (0.5*m_dt)*(vel_c(i,j,k,2))*dxinv[2]*
+                                          (slopes_eb_hi[2]);
 #else
                //Adding transverse derivative
-               qpls += - (0.25*m_dt)*(umac(i+1,j,k) + umac(i,j,k))*
-                                          (delta_x * slopes_eb_hi[0]);
+               qpls += - (0.5*m_dt)*(vel_c(i,j,k,0))*dxinv[0]*
+                                          (slopes_eb_hi[0]);
 #endif
 
                AMREX_D_TERM(xc = ccc(i,j-1,k,0);, // centroid of cell (i-1,j,k)
@@ -1165,7 +1167,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                const auto& slopes_eb_lo = amrex_calc_slopes_eb(i,j-1,k,n,q,ccc,flag);
 
                //Adding temporal term with the normal derivative to the face 
-               temp_v = -0.5*vmac(i,j-1,k)*m_dt;
+               temp_v = -0.5*vel_c(i,j-1,k,1)*m_dt*dxinv[1];
 
 #if (AMREX_SPACEDIM == 3)
                Real qmns = q(i,j-1,k,n) + (delta_x         ) * slopes_eb_lo[0]
@@ -1184,14 +1186,14 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 
 #if (AMREX_SPACEDIM == 3)
                //Adding transverse derivative
-               qmns += - (0.25*m_dt)*(umac(i+1,j-1,k) + umac(i,j-1,k))*
-                                          (delta_x * slopes_eb_lo[0]);
-               qmns += - (0.25*m_dt)*(wmac(i,j-1,k+1) + wmac(i,j-1,k))*
-                                          (delta_z * slopes_eb_lo[2]);
+               qmns += - (0.5*m_dt)*(vel_c(i,j-1,k,0))*dxinv[0]*
+                                          (slopes_eb_lo[0]);
+               qmns += - (0.5*m_dt)*(vel_c(i,j-1,k,2))*dxinv[2]*
+                                          (slopes_eb_lo[2]);
 #else
                //Adding transverse derivative
-               qmns += - (0.25*m_dt)*(umac(i+1,j-1,k) + umac(i,j-1,k))*
-                                          (delta_x * slopes_eb_lo[0]);
+               qmns += - (0.5*m_dt)*(vel_c(i,j-1,k,0))*dxinv[0]*
+                                          (slopes_eb_lo[0]);
 #endif
 
                if (vmac(i,j,k) > small_vel) {
@@ -1214,7 +1216,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
         // Predict to z-faces
         // ****************************************************************************
         amrex::ParallelFor(zbx, ncomp,
-        [q,ccc,fcz,flag,wmac,small_vel,fz,m_dt,fq,umac,vmac]
+        [q,ccc,fcz,flag,wmac,small_vel,fz,m_dt,fq,vel_c,dxinv]
         AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
         {
             if (flag(i,j,k).isConnected(0,0,-1)) {
@@ -1238,7 +1240,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                 const auto& slopes_eb_hi = amrex_calc_slopes_eb(i,j,k,n,q,ccc,flag);
  
                 //Adding temporal term with the normal derivative to the face
-                Real temp_w = -0.5*wmac(i,j,k)*m_dt;
+                Real temp_w = -0.5*vel_c(i,j,k,2)*m_dt*dxinv[2];
 
                 Real qpls = q(i,j,k  ,n) + (delta_x         ) * slopes_eb_hi[0]
                                          + (delta_y         ) * slopes_eb_hi[1]
@@ -1251,10 +1253,10 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                 }
 
                 //Adding transverse derivative
-                qpls += - (0.25*m_dt)*(umac(i+1,j,k) + umac(i,j,k))*
-                                           (delta_x * slopes_eb_hi[0]);
-                qpls += - (0.25*m_dt)*(vmac(i,j+1,k) + vmac(i,j,k))*
-                                           (delta_y * slopes_eb_hi[1]);
+                qpls += - (0.5*m_dt)*(vel_c(i,j,k,0))*dxinv[0]*
+                                           (slopes_eb_hi[0]);
+                qpls += - (0.5*m_dt)*(vel_c(i,j,k,1))*dxinv[1]*
+                                           (slopes_eb_hi[1]);
  
                 xc = ccc(i,j,k-1,0); // centroid of cell (i,j,k-1)
                 yc = ccc(i,j,k-1,1);
@@ -1268,7 +1270,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                 const auto& slopes_eb_lo = amrex_calc_slopes_eb(i,j,k-1,n,q,ccc,flag);
 
                 //Adding temporal term with the normal derivative to the face
-                temp_w = -0.5*wmac(i,j,k-1)*m_dt;
+                temp_w = -0.5*vel_c(i,j,k-1,2)*m_dt*dxinv[2];
 
                 Real qmns = q(i,j,k-1,n) + (delta_x         ) * slopes_eb_lo[0]
                                          + (delta_y         ) * slopes_eb_lo[1]
@@ -1281,10 +1283,10 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                 }
 
                 //Adding transverse derivative
-                qmns += - (0.25*m_dt)*(umac(i+1,j,k-1) + umac(i,j,k-1))*
-                                           (delta_x * slopes_eb_lo[0]);
-                qmns += - (0.25*m_dt)*(vmac(i,j+1,k-1) + vmac(i,j,k-1))*
-                                           (delta_y * slopes_eb_lo[1]);
+                qmns += - (0.5*m_dt)*(vel_c(i,j,k-1,0))*dxinv[0]*
+                                           (slopes_eb_lo[0]);
+                qmns += - (0.5*m_dt)*(vel_c(i,j,k-1,1))*dxinv[1]*
+                                           (slopes_eb_lo[1]);
 
                 if (wmac(i,j,k) > small_vel) {
                     qs = qmns;
