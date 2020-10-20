@@ -230,6 +230,16 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                 redistribute_eb(lev, bx, 1, drdt, dUdt_tmp, scratch, flag, vfrac);
             }
             if (m_advect_tracer) {
+                bool mix = true;
+                if (mix) {
+                    godunov::compute_godunov_advection(lev, bx, m_ntrac,
+                                                       dtdt, rhotrac,
+                                                       AMREX_D_DECL(umac, vmac, wmac), ftra,
+                                                       geom, m_dt,
+                                                       get_tracer_bcrec_device_ptr(),
+                                                       get_tracer_iconserv_device_ptr(),
+                                                       tmpfab.dataPtr(),m_godunov_ppm);
+                }
                 godunov::compute_godunov_advection_eb(lev, gbx, m_ntrac,
                                                       AMREX_D_DECL(fx, fy, fz), rhotrac,
                                                       AMREX_D_DECL(umac, vmac, wmac), ftra,
@@ -237,8 +247,13 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                                                       get_tracer_bcrec_device_ptr(),
                                                       flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, Geom(), vel, m_dt);
 
-                mol::compute_convective_rate_eb(lev, gbx, m_ntrac, dUdt_tmp, AMREX_D_DECL(fx, fy, fz),
-                                                flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());
+                if (mix) {
+                    godunov::compute_convective_rate_eb(lev, gbx, m_ntrac, dUdt_tmp, dtdt, AMREX_D_DECL(fx, fy, fz),
+                                                        flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());
+                }else{
+                    mol::compute_convective_rate_eb(lev, gbx, m_ntrac, dUdt_tmp, AMREX_D_DECL(fx, fy, fz),
+                                                        flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());
+                }
 
                 redistribute_eb(lev, bx, m_ntrac, dtdt, dUdt_tmp, scratch, flag, vfrac);
             }
@@ -440,6 +455,50 @@ mol::compute_convective_rate_eb (int lev, Box const& bx, int ncomp,
     });
 }
 
+void
+godunov::compute_convective_rate_eb (int lev, Box const& bx, int ncomp,
+                                     Array4<Real> const& dUdt_temp,
+                                     Array4<Real> const& dUdt,
+                                     AMREX_D_DECL(Array4<Real const> const& fx,
+                                                  Array4<Real const> const& fy,
+                                                  Array4<Real const> const& fz),
+                                     Array4<EBCellFlag const> const& flag,
+                                     Array4<Real const> const& vfrac,
+                                     AMREX_D_DECL(Array4<Real const> const& apx,
+                                                  Array4<Real const> const& apy,
+                                                  Array4<Real const> const& apz),
+                                     Vector<Geometry> geom)
+{   
+    const auto dxinv = geom[lev].InvCellSizeArray();
+    const Box dbox   = geom[lev].growPeriodicDomain(2);
+    amrex::ParallelFor(bx, ncomp,
+    [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
+    {
+#if (AMREX_SPACEDIM == 3)
+        if (!dbox.contains(IntVect(AMREX_D_DECL(i,j,k))) or flag(i,j,k).isCovered()) {
+            dUdt_temp(i,j,k,n) = 0.0;
+        } else if (flag(i,j,k).isRegular() and flag(i+1,j,k).isRegular() and flag(i-1,j,k).isRegular() and flag(i,j+1,k).isRegular() and flag(i,j-1,k).isRegular() and flag(i,j,k+1).isRegular() and flag(i,j,k-1).isRegular()) {
+            dUdt_temp(i,j,k,n) = dUdt(i,j,k,n);
+        } else {
+            dUdt_temp(i,j,k,n) = (1.0/vfrac(i,j,k)) *
+                     ( dxinv[0] * (apx(i,j,k)*fx(i,j,k,n) - apx(i+1,j,k)*fx(i+1,j,k,n))
+                     + dxinv[1] * (apy(i,j,k)*fy(i,j,k,n) - apy(i,j+1,k)*fy(i,j+1,k,n)) 
+                     + dxinv[2] * (apz(i,j,k)*fz(i,j,k,n) - apz(i,j,k+1)*fz(i,j,k+1,n)) );
+        }
+#else   
+        if (!dbox.contains(IntVect(AMREX_D_DECL(i,j,k))) or flag(i,j,k).isCovered()) {
+            dUdt_temp(i,j,k,n) = 0.0;
+        } else if (flag(i,j,k).isRegular() and flag(i+1,j,k).isRegular() and flag(i-1,j,k).isRegular() and flag(i,j+1,k).isRegular() and flag(i,j-1,k).isRegular()) {
+            dUdt_temp(i,j,k,n) = dUdt(i,j,k,n);
+        } else {
+            dUdt_temp(i,j,k,n) = (1.0/vfrac(i,j,k)) *
+                     ( dxinv[0] * (apx(i,j,k)*fx(i,j,k,n) - apx(i+1,j,k)*fx(i+1,j,k,n)) 
+                     + dxinv[1] * (apy(i,j,k)*fy(i,j,k,n) - apy(i,j+1,k)*fy(i,j+1,k,n)) );
+        }
+#endif
+    });
+}
+
 void incflo::redistribute_eb (int lev, Box const& bx, int ncomp,
                               Array4<Real> const& dUdt,
                               Array4<Real const> const& dUdt_in,
@@ -472,7 +531,7 @@ void incflo::redistribute_eb (int lev, Box const& bx, int ncomp,
             for (int kk = -1; kk <= 1; ++kk) {
             for (int jj = -1; jj <= 1; ++jj) {
             for (int ii = -1; ii <= 1; ++ii) {
-                if ((ii != 0 or jj != 0 or kk != 0) and
+                if (/*(ii != 0 or jj != 0 or kk != 0) and*/
                     flag(i,j,k).isConnected(ii,jj,kk) and
                     dbox.contains(IntVect(AMREX_D_DECL(i+ii,j+jj,k+kk))))
                 {
@@ -524,7 +583,6 @@ void incflo::redistribute_eb (int lev, Box const& bx, int ncomp,
     [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
     {
         dUdt(i,j,k,n) = dUdt_in(i,j,k,n) + tmp(i,j,k,n);
-        //std::cout<<"dUdt_in(i,j,k,n) "<<dUdt_in(i,j,k,n)<<" tmp(i,j,k,n) "<<tmp(i,j,k,n)<<std::endl;
     });
 }
 #endif

@@ -169,6 +169,19 @@ namespace godunov {
                                        amrex::Vector<amrex::Geometry> geom,
                                        amrex::Array4<amrex::Real const> const& vel_c,
                                        amrex::Real m_dt);
+
+    void compute_convective_rate_eb (int lev, amrex::Box const& bx, int ncomp,
+                                     amrex::Array4<amrex::Real> const& dUdt_temp,
+                                     amrex::Array4<amrex::Real> const& dUdt,
+                                     AMREX_D_DECL(amrex::Array4<amrex::Real const> const& fx,
+                                                  amrex::Array4<amrex::Real const> const& fy,
+                                                  amrex::Array4<amrex::Real const> const& fz),
+                                     amrex::Array4<amrex::EBCellFlag const> const& flag,
+                                     amrex::Array4<amrex::Real const> const& vfrac,
+                                     AMREX_D_DECL(amrex::Array4<amrex::Real const> const& apx,
+                                                  amrex::Array4<amrex::Real const> const& apy,
+                                                  amrex::Array4<amrex::Real const> const& apz),
+                                     amrex::Vector<amrex::Geometry> geom);
 #endif
 } // namespace godunov
 
