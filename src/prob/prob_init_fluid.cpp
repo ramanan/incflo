@@ -203,21 +203,22 @@ void incflo::init_channel_slant (Box const& vbx, Box const& gbx,
                                  GpuArray<Real, AMREX_SPACEDIM> const& problo,
                                  GpuArray<Real, AMREX_SPACEDIM> const& probhi)
 {
-    Real num_cells_y = static_cast<Real>(domain.length(1));
-    Real rotation  = 0;
-    Real radius    = 0;
-    // Get cylinder information from inputs file.                               *
-    ParmParse pp("cylinder");
-    pp.query("rotation",   rotation);
-    rotation = (rotation/180.) * M_PI;
+    const auto dhi = amrex::ubound(domain);
     Real u = m_ic_u;
+    Real v = m_ic_v;
     amrex::ParallelFor(vbx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
     {   
-        if (rotation > 0 and density(i,j,k)>0){
-            AMREX_D_TERM(vel(i,j,k,0) = u*std::cos(rotation);,
-                         vel(i,j,k,1) = u*std::sin(rotation);,
-                         vel(i,j,k,2) = 0.0;);
+        AMREX_D_TERM(vel(i,j,k,0) = u;,
+                     vel(i,j,k,1) = v;,
+                     vel(i,j,k,2) = 0.0;);
+
+        const int nt = tracer.nComp();
+        for (int n = 0; n < nt; ++n) {
+            tracer(i,j,k,n) = 0.0;
         }
+        if (nt > 0 and i <= dhi.x/8)   tracer(i,j,k,0) = 1.0;
+        if (nt > 1 and i <= dhi.x/2)   tracer(i,j,k,1) = 2.0;
+        if (nt > 2 and i <= dhi.x*3/4) tracer(i,j,k,2) = 3.0;
     });
 }
 
