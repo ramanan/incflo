@@ -26,29 +26,68 @@ incflo::compute_convective_term (Vector<MultiFab*> const& conv_u,
                                  AMREX_D_DECL(Vector<MultiFab*> const& u_mac,
                                               Vector<MultiFab*> const& v_mac,
                                               Vector<MultiFab*> const& w_mac),
-                                 Vector<MultiFab const*> const& vel_forces,
-                                 Vector<MultiFab const*> const& tra_forces,
+                                 Vector<MultiFab*      > const& vel_forces,
+                                 Vector<MultiFab*      > const& tra_forces,
                                  Real time)
 {
     int ngmac = nghost_mac();
 
     Real l_dt = m_dt;
 
+    auto mac_phi = get_mac_phi();
+
+    // This will hold (1/rho) on faces
+    Vector<Array<MultiFab,AMREX_SPACEDIM> > inv_rho(finest_level+1);
+    for (int lev=0; lev <= finest_level; ++lev)
+    {
+        AMREX_D_TERM(inv_rho[lev][0].define(u_mac[lev]->boxArray(),dmap[lev],1,0,MFInfo(),Factory(lev));,
+                     inv_rho[lev][1].define(v_mac[lev]->boxArray(),dmap[lev],1,0,MFInfo(),Factory(lev));,
+                     inv_rho[lev][2].define(w_mac[lev]->boxArray(),dmap[lev],1,0,MFInfo(),Factory(lev)););
+    }
+
+
+    if (m_use_godunov) {
+     
+        bool include_pressure_gradient = !(m_use_mac_phi_in_godunov);
+        compute_vel_forces(vel_forces, vel, density, tracer, tracer, include_pressure_gradient);
+
+        if (m_godunov_include_diff_in_forcing)
+            for (int lev = 0; lev <= finest_level; ++lev) 
+                MultiFab::Add(*vel_forces[lev], m_leveldata[lev]->divtau_o, 0, 0, AMREX_SPACEDIM, 0);
+
+        if (nghost_force() > 0)  
+            fillpatch_force(m_cur_time, vel_forces, nghost_force());
+    }
+
     for (int lev = 0; lev <= finest_level; ++lev) {
 
 #ifdef AMREX_USE_EB
         const EBFArrayBoxFactory* ebfact = &EBFactory(lev);
+        EB_interp_CellCentroid_to_FaceCentroid (*density[lev], GetArrOfPtrs(inv_rho[lev]), 0, 0, 1,
+                                                geom[lev], get_density_bcrec());
+#else
+        amrex::average_cellcenter_to_face(GetArrOfPtrs(inv_rho[lev]), *density[lev], geom[lev]);
 #endif
+
+        for (int idim = 0; idim < AMREX_SPACEDIM; ++idim) {
+            inv_rho[lev][idim].invert(1.0, 0);
+        }
+
+        mac_phi[lev]->FillBoundary(geom[lev].periodicity());
 
         // Predict normal velocity to faces -- note that the {u_mac, v_mac, w_mac}
         //    returned from this call are on face CENTROIDS
+
         if (m_use_godunov) {
-            godunov::predict_godunov(lev, time, AMREX_D_DECL(*u_mac[lev], *v_mac[lev], *w_mac[lev]), *vel[lev], *vel_forces[lev],
+            godunov::predict_godunov(lev, time, 
+                                     AMREX_D_DECL(*u_mac[lev], *v_mac[lev], *w_mac[lev]), 
+                                     *mac_phi[lev], *vel[lev], *vel_forces[lev], inv_rho[lev],
                                      get_velocity_bcrec(), get_velocity_bcrec_device_ptr(),
 #ifdef AMREX_USE_EB
                                      ebfact,
 #endif
-                                     Geom(), l_dt, m_godunov_ppm, m_godunov_use_forces_in_trans);
+                                     Geom(), l_dt, m_godunov_ppm, m_godunov_use_forces_in_trans,
+                                     m_use_mac_phi_in_godunov);
         } else {
 
             mol::predict_vels_on_faces(lev, AMREX_D_DECL(*u_mac[lev], *v_mac[lev], *w_mac[lev]), *vel[lev],
@@ -60,7 +99,32 @@ incflo::compute_convective_term (Vector<MultiFab*> const& conv_u,
         }
     }
 
-    apply_MAC_projection(AMREX_D_DECL(u_mac, v_mac, w_mac), density, time);
+    apply_MAC_projection(AMREX_D_DECL(u_mac, v_mac, w_mac), GetVecOfArrOfConstPtrs(inv_rho), time);
+
+    // We now re-compute the velocity forcing terms including the pressure gradient,
+    //    and compute the tracer forcing terms for the first time
+    if (m_use_godunov)
+    {
+        compute_vel_forces(vel_forces, vel, density, tracer, tracer);
+
+        if (m_godunov_include_diff_in_forcing)
+            for (int lev = 0; lev <= finest_level; ++lev)
+                MultiFab::Add(*vel_forces[lev], m_leveldata[lev]->divtau_o, 0, 0, AMREX_SPACEDIM, 0);
+
+        if (nghost_force() > 0) 
+            fillpatch_force(m_cur_time, vel_forces, nghost_force());
+
+        // Note this is forcing for (rho s), not for s
+        if (m_advect_tracer)
+        {
+            compute_tra_forces(tra_forces, get_density_old_const());
+            if (m_godunov_include_diff_in_forcing)
+                for (int lev = 0; lev <= finest_level; ++lev)
+                    MultiFab::Add(*tra_forces[lev], m_leveldata[lev]->laps_o, 0, 0, m_ntrac, 0);
+            if (nghost_force() > 0) 
+                fillpatch_force(m_cur_time, tra_forces, nghost_force());
+        }
+    }
 
     for (int lev = 0; lev <= finest_level; ++lev)
     {
@@ -78,6 +142,7 @@ incflo::compute_convective_term (Vector<MultiFab*> const& conv_u,
 #endif
         for (MFIter mfi(*density[lev],mfi_info); mfi.isValid(); ++mfi)
         {
+
             Box const& bx = mfi.tilebox();
             compute_convective_term(bx, lev, mfi,
                                     conv_u[lev]->array(mfi),
@@ -238,7 +303,8 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                                                        geom, m_dt,
                                                        get_tracer_bcrec_device_ptr(),
                                                        get_tracer_iconserv_device_ptr(),
-                                                       tmpfab.dataPtr(),m_godunov_ppm);
+                                                       tmpfab.dataPtr(),m_godunov_ppm,
+                                                       m_godunov_use_forces_in_trans, true);
                 }
                 godunov::compute_godunov_advection_eb(lev, gbx, m_ntrac,
                                                       AMREX_D_DECL(fx, fy, fz), rhotrac,
@@ -266,7 +332,8 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                                                geom, m_dt, 
                                                get_velocity_bcrec_device_ptr(),
                                                get_velocity_iconserv_device_ptr(),
-                                               tmpfab.dataPtr(),m_godunov_ppm, true);
+                                               tmpfab.dataPtr(),m_godunov_ppm, 
+                                               m_godunov_use_forces_in_trans, true);
             if (!m_constant_density) {
     
                 godunov::compute_godunov_advection(lev, bx, 1,
@@ -275,7 +342,8 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                                                    geom, m_dt, 
                                                    get_density_bcrec_device_ptr(),
                                                    get_density_iconserv_device_ptr(),
-                                                   tmpfab.dataPtr(),m_godunov_ppm);
+                                                   tmpfab.dataPtr(),m_godunov_ppm,
+                                                   m_godunov_use_forces_in_trans);
             }
     
             if (m_advect_tracer) {
@@ -285,7 +353,8 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                                                    geom, m_dt,
                                                    get_tracer_bcrec_device_ptr(),
                                                    get_tracer_iconserv_device_ptr(),
-                                                   tmpfab.dataPtr(),m_godunov_ppm);
+                                                   tmpfab.dataPtr(),m_godunov_ppm,
+                                                   m_godunov_use_forces_in_trans);
     
             }
         }

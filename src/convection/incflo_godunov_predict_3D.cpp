@@ -6,14 +6,17 @@
 using namespace amrex;
 
 void godunov::predict_godunov (int lev, Real time, MultiFab& u_mac, MultiFab& v_mac,
-                               MultiFab& w_mac, MultiFab const& vel, MultiFab const& vel_forces,
+                               MultiFab& w_mac, MultiFab const& mac_phi, 
+                               MultiFab const& vel, MultiFab const& vel_forces,
+                               Array<MultiFab,AMREX_SPACEDIM> const& inv_rho,
                                Vector<BCRec> const& h_bcrec,
                                       BCRec  const* d_bcrec,
 #ifdef AMREX_USE_EB
                                EBFArrayBoxFactory const* ebfact,
 #endif
                                Vector<Geometry> geom, Real l_dt, 
-                               bool use_ppm, bool use_forces_in_trans)
+                               bool use_ppm, bool use_forces_in_trans,
+                               bool use_mac_phi_in_godunov)
 {
 
 #ifdef AMREX_USE_EB
@@ -108,11 +111,13 @@ void godunov::predict_godunov (int lev, Real time, MultiFab& u_mac, MultiFab& v_
                                       u_ad, v_ad, w_ad,
                                       Imx, Imy, Imz, Ipx, Ipy, Ipz, a_vel, a_f, 
                                       domain, l_dt, d_bcrec, use_forces_in_trans);
-    
+   
                 predict_godunov_on_box(lev, bx, ncomp, xbx, ybx, zbx, a_umac, a_vmac, a_wmac,
-                                       a_vel, u_ad, v_ad, w_ad, Imx, Imy, Imz, Ipx, Ipy, Ipz, a_f, 
-                                       domain, dx, l_dt, d_bcrec, use_forces_in_trans, p);
-    
+                                       a_vel, u_ad, v_ad, w_ad, mac_phi_arr,
+                                       inv_rho_x, inv_rho_y, inv_rho_z,
+                                       Imx, Imy, Imz, Ipx, Ipy, Ipz, a_f,
+                                       domain, dx, l_dt, d_bcrec, use_forces_in_trans, use_mac_phi_in_godunov, p);
+ 
                 Gpu::streamSynchronize();  // otherwise we might be using too much memory
             }
         }
@@ -147,18 +152,16 @@ void godunov::make_trans_velocities (int lev, Box const& xbx, Box const& ybx, Bo
         // We only care about x-velocity on x-faces here
         constexpr int n = 0;
 
-        Real lo, hi;
+        Real lo = Ipx(i-1,j,k,n);
+        Real hi = Imx(i  ,j,k,n);
+
         if (l_use_forces_in_trans) {
-            lo = Ipx(i-1,j,k,n) + 0.5*l_dt*f(i-1,j,k,n);
-            hi = Imx(i  ,j,k,n) + 0.5*l_dt*f(i  ,j,k,n);
-        } else {
-            lo = Ipx(i-1,j,k,n);
-            hi = Imx(i  ,j,k,n);
+            lo += 0.5*l_dt*f(i-1,j,k,n);
+            hi += 0.5*l_dt*f(i  ,j,k,n);
         }
 
         auto bc = pbc[n];
         Godunov_trans_xbc(i, j, k, n, vel, lo, hi, lo, bc.lo(0), bc.hi(0), dlo.x, dhi.x, true);
-
 
         Real st = ( (lo+hi) >= 0.) ? lo : hi;
         bool ltm = ( (lo <= 0. && hi >= 0.) || (amrex::Math::abs(lo+hi) < small_vel) );
@@ -169,18 +172,16 @@ void godunov::make_trans_velocities (int lev, Box const& xbx, Box const& ybx, Bo
         // We only care about y-velocity on y-faces here
         constexpr int n = 1;
 
-        Real lo, hi;
+        Real lo = Ipy(i,j-1,k,n);
+        Real hi = Imy(i,j  ,k,n);
+
         if (l_use_forces_in_trans) {
-            lo = Ipy(i,j-1,k,n) + 0.5*l_dt*f(i,j-1,k,n);
-            hi = Imy(i,j  ,k,n) + 0.5*l_dt*f(i,j  ,k,n);
-        } else {
-            lo = Ipy(i,j-1,k,n);
-            hi = Imy(i,j  ,k,n);
+            lo += 0.5*l_dt*f(i,j-1,k,n);
+            hi += 0.5*l_dt*f(i,j  ,k,n);
         }
 
         auto bc = pbc[n];
         Godunov_trans_ybc(i, j, k, n, vel, lo, hi, lo, bc.lo(1), bc.hi(1), dlo.y, dhi.y, true);
-
 
         Real st = ( (lo+hi) >= 0.) ? lo : hi;
         bool ltm = ( (lo <= 0. && hi >= 0.) || (amrex::Math::abs(lo+hi) < small_vel) );
@@ -191,18 +192,16 @@ void godunov::make_trans_velocities (int lev, Box const& xbx, Box const& ybx, Bo
         // We only care about z-velocity on z-faces here
         constexpr int n = 2;
 
-        Real lo, hi;
+        Real lo = Ipz(i,j,k-1,n);
+        Real hi = Imz(i,j,k  ,n);
+
         if (l_use_forces_in_trans) {
-            lo = Ipz(i,j,k-1,n) + 0.5*l_dt*f(i,j,k-1,n);
-            hi = Imz(i,j,k  ,n) + 0.5*l_dt*f(i,j,k  ,n);
-        } else {
-            lo = Ipz(i,j,k-1,n);
-            hi = Imz(i,j,k  ,n);
+            lo += 0.5*l_dt*f(i,j,k-1,n);
+            hi += 0.5*l_dt*f(i,j,k  ,n);
         }
 
         auto bc = pbc[n];
         Godunov_trans_zbc(i, j, k, n, vel, lo, hi, lo, bc.lo(2), bc.hi(2), dlo.z, dhi.z, true);
-
 
         Real st = ( (lo+hi) >= 0.) ? lo : hi;
         bool ltm = ( (lo <= 0. && hi >= 0.) || (amrex::Math::abs(lo+hi) < small_vel) );
@@ -219,6 +218,10 @@ void godunov::predict_godunov_on_box (int lev, Box const& bx, int ncomp,
                                       Array4<Real const> const& u_ad,
                                       Array4<Real const> const& v_ad,
                                       Array4<Real const> const& w_ad,
+                                      Array4<Real const> const& mac_phi,
+                                      Array4<Real const> const& inv_rho_x,
+                                      Array4<Real const> const& inv_rho_y,
+                                      Array4<Real const> const& inv_rho_z,
                                       Array4<Real> const& Imx,
                                       Array4<Real> const& Imy,
                                       Array4<Real> const& Imz,
@@ -231,6 +234,7 @@ void godunov::predict_godunov_on_box (int lev, Box const& bx, int ncomp,
                                       Real l_dt,
                                       BCRec  const* pbc,
                                       bool l_use_forces_in_trans,
+                                      bool l_use_mac_phi_in_godunov,
                                       Real* p)
 {
     // const Box& domain = Geom(lev).Domain();
@@ -261,13 +265,12 @@ void godunov::predict_godunov_on_box (int lev, Box const& bx, int ncomp,
     amrex::ParallelFor(
         xebox, ncomp, [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
         {
-            Real lo, hi;
+            Real lo = Ipx(i-1,j,k,n);
+            Real hi = Imx(i  ,j,k,n);
+
             if (l_use_forces_in_trans) {
-                lo = Ipx(i-1,j,k,n) + 0.5*l_dt*f(i-1,j,k,n);
-                hi = Imx(i  ,j,k,n) + 0.5*l_dt*f(i  ,j,k,n);
-            } else {
-                lo = Ipx(i-1,j,k,n);
-                hi = Imx(i  ,j,k,n);
+                lo += 0.5*l_dt*f(i-1,j,k,n);
+                hi += 0.5*l_dt*f(i  ,j,k,n);
             }
 
             Real uad = u_ad(i,j,k);
@@ -278,20 +281,18 @@ void godunov::predict_godunov_on_box (int lev, Box const& bx, int ncomp,
             xlo(i,j,k,n) = lo;
             xhi(i,j,k,n) = hi;
 
-
             Real st = (uad >= 0.) ? lo : hi;
             Real fu = (amrex::Math::abs(uad) < small_vel) ? 0.0 : 1.0;
             Imx(i, j, k, n) = fu*st + (1.0 - fu) *0.5 * (hi + lo); // store xedge
         },
         yebox, ncomp, [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
         {
-            Real lo, hi;
+            Real lo = Ipy(i,j-1,k,n);
+            Real hi = Imy(i,j  ,k,n);
+
             if (l_use_forces_in_trans) {
-                lo = Ipy(i,j-1,k,n) + 0.5*l_dt*f(i,j-1,k,n);
-                hi = Imy(i,j  ,k,n) + 0.5*l_dt*f(i,j  ,k,n);
-            } else {
-                lo = Ipy(i,j-1,k,n);
-                hi = Imy(i,j  ,k,n);
+                lo += 0.5*l_dt*f(i,j-1,k,n);
+                hi += 0.5*l_dt*f(i,j  ,k,n);
             }
 
             Real vad = v_ad(i,j,k);
@@ -302,20 +303,18 @@ void godunov::predict_godunov_on_box (int lev, Box const& bx, int ncomp,
             ylo(i,j,k,n) = lo;
             yhi(i,j,k,n) = hi;
 
-
             Real st = (vad >= 0.) ? lo : hi;
             Real fu = (amrex::Math::abs(vad) < small_vel) ? 0.0 : 1.0;
             Imy(i, j, k, n) = fu*st + (1.0 - fu)*0.5*(hi + lo); // store yedge
         },
         zebox, ncomp, [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
         {
-            Real lo, hi;
+            Real lo = Ipz(i,j,k-1,n);
+            Real hi = Imz(i,j,k  ,n);
+
             if (l_use_forces_in_trans) {
-                lo = Ipz(i,j,k-1,n) + 0.5*l_dt*f(i,j,k-1,n);
-                hi = Imz(i,j,k  ,n) + 0.5*l_dt*f(i,j,k  ,n);
-            } else {
-                lo = Ipz(i,j,k-1,n);
-                hi = Imz(i,j,k  ,n);
+                lo += 0.5*l_dt*f(i,j,k-1,n);
+                hi += 0.5*l_dt*f(i,j,k  ,n);
             }
 
             Real wad = w_ad(i,j,k);
@@ -325,7 +324,6 @@ void godunov::predict_godunov_on_box (int lev, Box const& bx, int ncomp,
 
             zlo(i,j,k,n) = lo;
             zhi(i,j,k,n) = hi;
-
 
             Real st = (wad >= 0.) ? lo : hi;
             Real fu = (amrex::Math::abs(wad) < small_vel) ? 0.0 : 1.0;
@@ -408,6 +406,15 @@ void godunov::predict_godunov_on_box (int lev, Box const& bx, int ncomp,
             sth += 0.5 * l_dt * f(i  ,j,k,n);
         }
 
+        Real gphi_x;
+
+        if (l_use_mac_phi_in_godunov)
+        {
+            gphi_x = ( (mac_phi(i,j,k) - mac_phi(i-1,j,k)) / dx ) * inv_rho_x(i,j,k);
+            stl -= 0.5 * l_dt * gphi_x;
+            sth -= 0.5 * l_dt * gphi_x;
+        }
+
         Godunov_cc_xbc_lo(i, j, k, n, q, stl, sth, u_ad, bc.lo(0), dlo.x, true);
         Godunov_cc_xbc_hi(i, j, k, n, q, stl, sth, u_ad, bc.hi(0), dhi.x, true);
 
@@ -426,6 +433,9 @@ void godunov::predict_godunov_on_box (int lev, Box const& bx, int ncomp,
         Real st = ( (stl+sth) >= 0.) ? stl : sth;
         bool ltm = ( (stl <= 0. && sth >= 0.) || (amrex::Math::abs(stl+sth) < small_vel) );
         qx(i,j,k) = ltm ? 0. : st;
+
+        if (l_use_mac_phi_in_godunov)
+            qx(i,j,k) += 0.5 * l_dt * gphi_x;
     });
 
     //
@@ -490,8 +500,17 @@ void godunov::predict_godunov_on_box (int lev, Box const& bx, int ncomp,
                                 - (0.25*l_dt/dz)*(w_ad(i  ,j  ,k+1)+w_ad(i,j  ,k))*
                                                  (zxlo(i  ,j  ,k+1)-zxlo(i,j  ,k));
         if (!l_use_forces_in_trans) {
-           stl += 0.5 * l_dt * f(i,j-1,k,n);
-           sth += 0.5 * l_dt * f(i,j  ,k,n);
+            stl += 0.5 * l_dt * f(i,j-1,k,n);
+            sth += 0.5 * l_dt * f(i,j  ,k,n);
+        }
+
+        Real gphi_y;
+
+        if (l_use_mac_phi_in_godunov)
+        {
+            gphi_y = ( (mac_phi(i,j,k) - mac_phi(i,j-1,k)) / dy ) * inv_rho_y(i,j,k);
+            stl -= 0.5 * l_dt * gphi_y;
+            sth -= 0.5 * l_dt * gphi_y;
         }
 
         Godunov_cc_ybc_lo(i, j, k, n, q, stl, sth, v_ad, bc.lo(1), dlo.y, true);
@@ -512,6 +531,9 @@ void godunov::predict_godunov_on_box (int lev, Box const& bx, int ncomp,
         Real st = ( (stl+sth) >= 0.) ? stl : sth;
         bool ltm = ( (stl <= 0. && sth >= 0.) || (amrex::Math::abs(stl+sth) < small_vel) );
         qy(i,j,k) = ltm ? 0. : st;
+
+        if (l_use_mac_phi_in_godunov)
+            qy(i,j,k) += 0.5 * l_dt * gphi_y;
     });
 
     //
@@ -579,10 +601,18 @@ void godunov::predict_godunov_on_box (int lev, Box const& bx, int ncomp,
                                                  (xylo(i+1,j  ,k  )-xylo(i,j,k  ))
                                 - (0.25*l_dt/dy)*(v_ad(i  ,j+1,k  )+v_ad(i,j,k  ))*
                                                  (yxlo(i  ,j+1,k  )-yxlo(i,j,k  ));
-
         if (!l_use_forces_in_trans) {
            stl += 0.5 * l_dt * f(i,j,k-1,n);
            sth += 0.5 * l_dt * f(i,j,k  ,n);
+        }
+
+        Real gphi_z;
+
+        if (l_use_mac_phi_in_godunov)
+        {
+            gphi_z = ( (mac_phi(i,j,k) - mac_phi(i,j,k-1)) / dz ) * inv_rho_z(i,j,k);
+            stl -= 0.5 * l_dt * gphi_z;
+            sth -= 0.5 * l_dt * gphi_z;
         }
 
         Godunov_cc_zbc_lo(i, j, k, n, q, stl, sth, w_ad, bc.lo(2), dlo.z, true);
@@ -603,5 +633,8 @@ void godunov::predict_godunov_on_box (int lev, Box const& bx, int ncomp,
         Real st = ( (stl+sth) >= 0.) ? stl : sth;
         bool ltm = ( (stl <= 0. && sth >= 0.) || (amrex::Math::abs(stl+sth) < small_vel) );
         qz(i,j,k) = ltm ? 0. : st;
+
+        if (l_use_mac_phi_in_godunov)
+            qz(i,j,k) += 0.5 * l_dt * gphi_z;
     });
 }

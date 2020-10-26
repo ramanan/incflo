@@ -72,13 +72,15 @@ public: // for cuda
                              amrex::Vector<amrex::MultiFab const*> const& velocity,
                              amrex::Vector<amrex::MultiFab const*> const& density,
                              amrex::Vector<amrex::MultiFab const*> const& tracer_old,
-                             amrex::Vector<amrex::MultiFab const*> const& tracer_new);
+                             amrex::Vector<amrex::MultiFab const*> const& tracer_new,
+                             bool include_pressure_gradient = true);
     void compute_vel_forces_on_level ( int lev,
                                        amrex::MultiFab& vel_forces,
                                        const amrex::MultiFab& velocity,
                                        const amrex::MultiFab& density,
                                        const amrex::MultiFab& tracer_old,
-                                       const amrex::MultiFab& tracer_new);
+                                       const amrex::MultiFab& tracer_new,
+                                       bool include_pressure_gradient = true);
 
     ///////////////////////////////////////////////////////////////////////////
     //
@@ -105,8 +107,8 @@ public: // for cuda
                                   AMREX_D_DECL(amrex::Vector<amrex::MultiFab*> const& u_mac,
                                                amrex::Vector<amrex::MultiFab*> const& v_mac,
                                                amrex::Vector<amrex::MultiFab*> const& w_mac),
-                                  amrex::Vector<amrex::MultiFab const*> const& vel_forces,
-                                  amrex::Vector<amrex::MultiFab const*> const& tra_forces,
+                                  amrex::Vector<amrex::MultiFab      *> const& vel_forces,
+                                  amrex::Vector<amrex::MultiFab      *> const& tra_forces,
                                   amrex::Real time);
 
     void compute_convective_term (amrex::Box const& bx, int lev, amrex::MFIter const& mfi,
@@ -148,6 +150,9 @@ public: // for cuda
     void ComputeDivU (amrex::Real time);
     void ComputeDrag ();
     amrex::Real ComputeKineticEnergy () const;
+
+    void DiffFromExact (int lev, amrex::Geometry& lev_geom, amrex::Real t, amrex::MultiFab& error,
+                        int icomp_src, int icomp_err);
 
     virtual void compute_strainrate_at_level (int lev,
                                               amrex::MultiFab* sr,
@@ -384,6 +389,11 @@ private:
     //    the construction of the "trans" velocities
     bool m_godunov_use_forces_in_trans = false;
 
+    // If using Godunov, if true then don't include the pressure gradient
+    //    in the forcing term passed into the godunov routine; instead 
+    //    use gradient of mac phi which contains the full pressure
+    bool m_use_mac_phi_in_godunov = false;
+
     enum struct DiffusionType {
         Invalid, Explicit, Crank_Nicolson, Implicit
     };
@@ -430,12 +440,18 @@ private:
     int m_plt_rho         = 1;
     int m_plt_tracer      = 1;
     int m_plt_p           = 0;
+    int m_plt_macphi      = 0;
     int m_plt_eta         = 0;
     int m_plt_vort        = 1;
     int m_plt_forcing     = 0;
     int m_plt_strainrate  = 0;
     int m_plt_divu        = 0;
     int m_plt_vfrac       = 1;
+    int m_plt_error_u     = 0;
+    int m_plt_error_v     = 0;
+    int m_plt_error_w     = 0;
+    int m_plt_error_p     = 0;
+    int m_plt_error_mac_p = 0;
 
     struct LevelData {
         LevelData () = default;
@@ -452,6 +468,9 @@ private:
         amrex::MultiFab density_o;
         amrex::MultiFab tracer;
         amrex::MultiFab tracer_o;
+
+        amrex::MultiFab mac_phi; // cell-centered pressure used in MAC projection
+
         amrex::MultiFab gp; // pressure gradient
         // nodal multifabs
         amrex::MultiFab p;
@@ -580,6 +599,7 @@ private:
     amrex::Vector<amrex::MultiFab*> get_density_new () noexcept;
     amrex::Vector<amrex::MultiFab*> get_tracer_old () noexcept;
     amrex::Vector<amrex::MultiFab*> get_tracer_new () noexcept;
+    amrex::Vector<amrex::MultiFab*> get_mac_phi () noexcept;
     amrex::Vector<amrex::MultiFab*> get_vel_forces () noexcept;
     amrex::Vector<amrex::MultiFab*> get_tra_forces () noexcept;
     amrex::Vector<amrex::MultiFab*> get_conv_velocity_old () noexcept;
@@ -690,7 +710,7 @@ private:
     void apply_MAC_projection (AMREX_D_DECL(amrex::Vector<amrex::MultiFab*> const& u_mac,
                                             amrex::Vector<amrex::MultiFab*> const& v_mac,
                                             amrex::Vector<amrex::MultiFab*> const& w_mac),
-                               amrex::Vector<amrex::MultiFab const*> const& density,
+                               amrex::Vector<amrex::Array<amrex::MultiFab const*,AMREX_SPACEDIM>> const& inv_rho,
                                amrex::Real time);
 
     ///////////////////////////////////////////////////////////////////////////
