@@ -139,6 +139,26 @@ namespace godunov {
                                     bool use_forces_in_trans,
                                     bool is_velocity = false);
 
+    void compute_godunov_advection_ls (int lev, amrex::Box const& bx, int ncomp,
+                                       amrex::Array4<amrex::Real> const& dqdt,
+                                       amrex::Array4<amrex::Real const> const& q,
+                                       AMREX_D_DECL(amrex::Array4<amrex::Real const> const& umac,
+                                                    amrex::Array4<amrex::Real const> const& vmac,
+                                                    amrex::Array4<amrex::Real const> const& wmac),
+                                       amrex::Array4<amrex::Real const> const& fq,
+                                       amrex::Vector<amrex::Geometry> geom,
+                                       amrex::Real dt,
+                                       amrex::BCRec const* d_bcrec, 
+                                       int const* iconserv,
+                                       amrex::Real* p, bool use_ppm, 
+                                       bool use_forces_in_trans,
+                                       amrex::Array4<amrex::EBCellFlag const> const& flag,
+                                       AMREX_D_DECL(amrex::Array4<amrex::Real const> const& fcx,
+                                                    amrex::Array4<amrex::Real const> const& fcy,
+                                                    amrex::Array4<amrex::Real const> const& fcz),
+                                       amrex::Array4<amrex::Real const> const& ccc,
+                                       bool is_velocity = false);
+   
 #ifdef AMREX_USE_EB
     void predict_vels_on_faces_eb (int lev,
                                    amrex::Box const& ccbx,
