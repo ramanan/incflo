@@ -269,19 +269,21 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
             Array4<Real> scratch = tmpfab_eb.array(0);
             Array4<Real> dUdt_tmp = tmpfab_eb.array(nmaxcomp*3);
 
-            bool mix = true;
-            if (mix) {
-                godunov::compute_godunov_advection_ls(lev, bx, AMREX_SPACEDIM,
-                                                      dvdt, vel,
-                                                      AMREX_D_DECL(umac, vmac, wmac), fvel,
-                                                      geom, m_dt,
-                                                      get_tracer_bcrec_device_ptr(),
-                                                      get_tracer_iconserv_device_ptr(),
-                                                      tmpfab.dataPtr(),m_godunov_ppm,
-                                                      m_godunov_use_forces_in_trans,
-                                                      flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, true);
-            }
+            //Compute the convective rate in regular cells that can apply 
+            //monotonicity-limited slope approximation in a single valued fab. 
+            //And in regular cells that can't apply monotonicity-limited slope approximation,
+            //a limited least-square slope approximation is applied
+            godunov::compute_godunov_advection_ls(lev, bx, AMREX_SPACEDIM,
+                                                  dvdt, vel,
+                                                  AMREX_D_DECL(umac, vmac, wmac), fvel,
+                                                  geom, m_dt,
+                                                  get_tracer_bcrec_device_ptr(),
+                                                  get_tracer_iconserv_device_ptr(),
+                                                  tmpfab.dataPtr(),m_godunov_ppm,
+                                                  m_godunov_use_forces_in_trans,
+                                                  flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, true);
 
+            //Compute the fluxes in cut cells using a limited least-square slope approximation
             godunov::compute_godunov_advection_eb(lev, gbx, AMREX_SPACEDIM,
                                                   AMREX_D_DECL(fx, fy, fz), vel,
                                                   AMREX_D_DECL(umac, vmac, wmac), fvel,
@@ -289,17 +291,24 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                                                   get_velocity_bcrec_device_ptr(),
                                                   flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, Geom(), vel, m_dt);
 
-            if (mix) {
-                godunov::compute_convective_rate_eb(lev, gbx, AMREX_SPACEDIM, dUdt_tmp, dvdt, AMREX_D_DECL(fx, fy, fz),
-                                                    flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());
-            }else{
-                mol::compute_convective_rate_eb(lev, gbx, AMREX_SPACEDIM, dUdt_tmp, AMREX_D_DECL(fx, fy, fz),
-                                                    flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());
-            }
+            //Compute the convective rate for cut cells
+            godunov::compute_convective_rate_eb(lev, gbx, AMREX_SPACEDIM, dUdt_tmp, dvdt, AMREX_D_DECL(fx, fy, fz),
+                                                flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());
 
             redistribute_eb(lev, bx, AMREX_SPACEDIM, dvdt, dUdt_tmp, scratch, flag, vfrac);
 
             if (!m_constant_density) {
+
+                godunov::compute_godunov_advection_ls(lev, bx, 1,
+                                                      drdt, rho,
+                                                      AMREX_D_DECL(umac, vmac, wmac), {},
+                                                      geom, m_dt,
+                                                      get_density_bcrec_device_ptr(),
+                                                      get_density_iconserv_device_ptr(),
+                                                      tmpfab.dataPtr(),m_godunov_ppm,
+                                                      m_godunov_use_forces_in_trans,
+                                                      flag, AMREX_D_DECL(fcx, fcy, fcz), ccc);
+
                 godunov::compute_godunov_advection_eb(lev, gbx, 1,
                                                       AMREX_D_DECL(fx, fy, fz), rho,
                                                       AMREX_D_DECL(umac, vmac, wmac), {},
@@ -307,24 +316,22 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                                                       get_density_bcrec_device_ptr(),
                                                       flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, Geom(), vel, m_dt);
 
-                mol::compute_convective_rate_eb(lev, gbx, 1, dUdt_tmp, AMREX_D_DECL(fx, fy, fz),
-                                                flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());
+                godunov::compute_convective_rate_eb(lev, gbx, 1, dUdt_tmp, drdt, AMREX_D_DECL(fx, fy, fz),
+                                                    flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());
 
                 redistribute_eb(lev, bx, 1, drdt, dUdt_tmp, scratch, flag, vfrac);
             }
             if (m_advect_tracer) {
-                bool mix = true;
-                if (mix) {
-                    godunov::compute_godunov_advection_ls(lev, bx, m_ntrac,
-                                                          dtdt, rhotrac,
-                                                          AMREX_D_DECL(umac, vmac, wmac), ftra,
-                                                          geom, m_dt,
-                                                          get_tracer_bcrec_device_ptr(),
-                                                          get_tracer_iconserv_device_ptr(),
-                                                          tmpfab.dataPtr(),m_godunov_ppm,
-                                                          m_godunov_use_forces_in_trans, 
-                                                          flag, AMREX_D_DECL(fcx, fcy, fcz), ccc);
-                }
+                godunov::compute_godunov_advection_ls(lev, bx, m_ntrac,
+                                                      dtdt, rhotrac,
+                                                      AMREX_D_DECL(umac, vmac, wmac), ftra,
+                                                      geom, m_dt,
+                                                      get_tracer_bcrec_device_ptr(),
+                                                      get_tracer_iconserv_device_ptr(),
+                                                      tmpfab.dataPtr(),m_godunov_ppm,
+                                                      m_godunov_use_forces_in_trans, 
+                                                      flag, AMREX_D_DECL(fcx, fcy, fcz), ccc);
+
                 godunov::compute_godunov_advection_eb(lev, gbx, m_ntrac,
                                                       AMREX_D_DECL(fx, fy, fz), rhotrac,
                                                       AMREX_D_DECL(umac, vmac, wmac), ftra,
@@ -332,13 +339,8 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                                                       get_tracer_bcrec_device_ptr(),
                                                       flag, AMREX_D_DECL(fcx, fcy, fcz), ccc, Geom(), vel, m_dt);
 
-                if (mix) {
-                    godunov::compute_convective_rate_eb(lev, gbx, m_ntrac, dUdt_tmp, dtdt, AMREX_D_DECL(fx, fy, fz),
-                                                        flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());
-                }else{
-                    mol::compute_convective_rate_eb(lev, gbx, m_ntrac, dUdt_tmp, AMREX_D_DECL(fx, fy, fz),
-                                                        flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());
-                }
+                godunov::compute_convective_rate_eb(lev, gbx, m_ntrac, dUdt_tmp, dtdt, AMREX_D_DECL(fx, fy, fz),
+                                                    flag, vfrac, AMREX_D_DECL(apx, apy, apz), Geom());
 
                 redistribute_eb(lev, bx, m_ntrac, dtdt, dUdt_tmp, scratch, flag, vfrac);
             }
@@ -565,6 +567,8 @@ godunov::compute_convective_rate_eb (int lev, Box const& bx, int ncomp,
 #if (AMREX_SPACEDIM == 3)
         if (!dbox.contains(IntVect(AMREX_D_DECL(i,j,k))) or flag(i,j,k).isCovered()) {
             dUdt_temp(i,j,k,n) = 0.0;
+        //Here we copy the convective rate already computed for regular cells
+        //that can compute a fourth-order limited slopes
         } else if (flag(i,j,k).isRegular() and flag(i+1,j,k).isRegular() and flag(i-1,j,k).isRegular() and
                    flag(i+2,j,k).isRegular() and flag(i-2,j,k).isRegular() and 
                    flag(i,j+1,k).isRegular() and flag(i,j-1,k).isRegular() and 
@@ -581,6 +585,8 @@ godunov::compute_convective_rate_eb (int lev, Box const& bx, int ncomp,
 #else   
         if (!dbox.contains(IntVect(AMREX_D_DECL(i,j,k))) or flag(i,j,k).isCovered()) {
             dUdt_temp(i,j,k,n) = 0.0;
+        //Here we copy the convective rate already computed for regular cells
+        //that can compute a fourth-order limited slopes
         } else if (flag(i,j,k).isRegular() and flag(i+1,j,k).isRegular() and flag(i-1,j,k).isRegular() and 
                    flag(i,j+1,k).isRegular() and flag(i,j-1,k).isRegular() and 
                    flag(i+2,j,k).isRegular() and flag(i-2,j,k).isRegular() and 

@@ -23,191 +23,6 @@ namespace {
         }
         return r;
     }
-
-    AMREX_GPU_DEVICE AMREX_FORCE_INLINE
-    Real calc_alpha_stencil(Real q_hat, Real q_max, 
-                            Real q_min, Real state, Real alpha) noexcept
-    {
-        Real alpha_temp = 0.0;
-        if ((q_hat-state) > small_vel) {
-            alpha_temp = amrex::min(1.0,(q_max-state)/(q_hat-state));
-        } else if ((q_hat-state) < -small_vel) {
-            alpha_temp = amrex::min(1.0,(q_min-state)/(q_hat-state));
-        } else {
-            alpha_temp = 1.0;
-        }
-        return amrex::min(alpha, alpha_temp);
-    }
-
-    AMREX_GPU_DEVICE AMREX_FORCE_INLINE
-    amrex::GpuArray<amrex::Real,AMREX_SPACEDIM>
-    calc_alpha_limiter(int i, int j, int k, int n, int dir,
-                       amrex::Array4<amrex::Real const> const& state,
-                       amrex::Array4<amrex::EBCellFlag const> const& flag,
-                       const amrex::GpuArray<amrex::Real,AMREX_SPACEDIM>& slopes,
-                       AMREX_D_DECL(Array4<Real const> const& fcx,
-                                    Array4<Real const> const& fcy,
-                                    Array4<Real const> const& fcz),
-                       amrex::Array4<amrex::Real const> const& ccent) noexcept
-    {
-        Real alpha = 2.0;
-        Real q_min = state(i,j,k,n);
-        Real q_max = state(i,j,k,n);
-
-        int cuts_x = 0;
-        int cuts_y = 0;
-        int cuts_z = 0;
-
-#if (AMREX_SPACEDIM == 2)
-        constexpr int dim_a = 9;
-#elif (AMREX_SPACEDIM == 3)
-        constexpr int dim_a = 27;
-#endif
-        amrex::Real A[dim_a][AMREX_SPACEDIM];
-
-        int lc = 0;
-#if (AMREX_SPACEDIM == 3)
-        for(int kk(-1); kk<=1; kk++)
-#else
-        int kk = 0;
-#endif
-        {
-            for(int jj(-1); jj<=1; jj++){
-              for(int ii(-1); ii<=1; ii++){
-                if( flag(i,j,k).isConnected(ii,jj,kk) and
-                    not (ii==0 and jj==0 and kk==0) /*and ((ii!=-1 and j!=-1) or (ii!=1 and j!=-1) or (ii!=-1 and j!=1) or (ii!=1 and j!=1))*/) {
-                    if (state(i+ii,j+jj,k+kk,n) > q_max) q_max = state(i+ii,j+jj,k+kk,n);
-                    if (state(i+ii,j+jj,k+kk,n) < q_min) q_min = state(i+ii,j+jj,k+kk,n);
-
-                    A[lc][0] = ii + ccent(i+ii,j+jj,k+kk,0) - ccent(i,j,k,0);
-                    A[lc][1] = jj + ccent(i+ii,j+jj,k+kk,1) - ccent(i,j,k,1);
-#if (AMREX_SPACEDIM == 3)
-                    A[lc][2] = kk + ccent(i+ii,j+jj,k+kk,2) - ccent(i,j,k,2);
-#endif
-                    if ((ii==-1 or ii==1) and jj==0) cuts_x++;
-                    if ((jj==-1 or jj==1) and ii==0) cuts_y++;
-                }else{
-                    AMREX_D_TERM(A[lc][0] = 0.0;,
-                                 A[lc][1] = 0.0;,
-                                 A[lc][2] = 0.0;);
-                } 
-                lc++;
-              }
-            }
-        }
-
-        AMREX_D_TERM(Real xc = ccent(i,j,k,0);, // centroid of cell (i,j,k)
-                     Real yc = ccent(i,j,k,1);,
-                     Real zc = ccent(i,j,k,2););
-
-        if (dir){
-            if(flag(i,j,k).isConnected(0,1,0)) {
-                   Real xf = fcy(i,j+1,k,0); // local (x,z) of centroid of z-face we are extrapolating to
-
-                   AMREX_D_TERM(Real delta_x = xf  - xc;,
-                                Real delta_y = 0.5 - yc;,
-                                Real delta_z = zf  - zc;);
-
-                    Real q_hat = state(i,j,k,n) + delta_x * slopes[0]
-                                                + delta_y * slopes[1];
-                    alpha = calc_alpha_stencil(q_hat, q_max, q_min, state(i,j,k,n), alpha);
-            }
-            if (flag(i,j,k).isConnected(0,-1,0)){
-                   Real xf = fcy(i,j,k,0); // local (x,z) of centroid of z-face we are extrapolating to
-
-                   AMREX_D_TERM(Real delta_x = xf  - xc;,
-                                Real delta_y = 0.5 + yc;,
-                                Real delta_z = zf  - zc;);
-
-                    Real q_hat = state(i,j,k,n) + delta_x * slopes[0]
-                                                - delta_y * slopes[1];
-
-                    alpha = calc_alpha_stencil(q_hat, q_max, q_min, state(i,j,k,n), alpha);
-            }
-            if(flag(i,j,k).isConnected(1,0,0)) {
-                   Real yf = fcx(i+1,j,k,0); // local (y,z) of centroid of z-face we are extrapolating to
-
-                   AMREX_D_TERM(Real delta_x = 0.5 - xc;,
-                                Real delta_y = yf  - yc;,
-                                Real delta_z = zf  - zc;);
-
-                    Real q_hat = state(i,j,k,n) + delta_x * slopes[0]
-                                                + delta_y * slopes[1];
-
-                    alpha = calc_alpha_stencil(q_hat, q_max, q_min, state(i,j,k,n), alpha);
-            }
-            if(flag(i,j,k).isConnected(-1,0,0)) {
-                   Real yf = fcx(i,j,k,0); // local (y,z) of centroid of z-face we are extrapolating to
-
-                   AMREX_D_TERM(Real delta_x = 0.5 + xc;,
-                                Real delta_y = yf  - yc;,
-                                Real delta_z = zf  - zc;);
-
-                    Real q_hat = state(i,j,k,n) - delta_x * slopes[0]
-                                                + delta_y * slopes[1];
-
-                    alpha = calc_alpha_stencil(q_hat, q_max, q_min, state(i,j,k,n), alpha);
-            }
-        }else{
-            if(flag(i,j,k).isConnected(1,0,0)) {
-                   Real yf = fcx(i+1,j,k,0); // local (y,z) of centroid of z-face we are extrapolating to
-
-                   AMREX_D_TERM(Real delta_x = 0.5 - xc;,
-                                Real delta_y = yf  - yc;,
-                                Real delta_z = zf  - zc;);
-
-                    Real q_hat = state(i,j,k,n) + delta_x * slopes[0]
-                                                + delta_y * slopes[1];
-
-                    alpha = calc_alpha_stencil(q_hat, q_max, q_min, state(i,j,k,n), alpha);
-            }
-            if (flag(i,j,k).isConnected(-1,0,0)) {
-                   Real yf = fcx(i,j,k,0); // local (y,z) of centroid of z-face we are extrapolating to
-
-                   AMREX_D_TERM(Real delta_x = 0.5 + xc;,
-                                Real delta_y = yf  - yc;,
-                                Real delta_z = zf  - zc;);
-
-                    Real q_hat = state(i,j,k,n) - delta_x * slopes[0]
-                                                + delta_y * slopes[1];
-
-                    alpha = calc_alpha_stencil(q_hat, q_max, q_min, state(i,j,k,n), alpha);
-            }
-            if(flag(i,j,k).isConnected(0,1,0)) {
-                   Real xf = fcy(i,j+1,k,0); // local (x,z) of centroid of z-face we are extrapolating to
-
-                   AMREX_D_TERM(Real delta_x = xf  - xc;,
-                                Real delta_y = 0.5 - yc;,
-                                Real delta_z = zf  - zc;);
-
-                    Real q_hat = state(i,j,k,n) + delta_x * slopes[0]
-                                                + delta_y * slopes[1];
-
-                    alpha = calc_alpha_stencil(q_hat, q_max, q_min, state(i,j,k,n), alpha);
-            }
-            if(flag(i,j,k).isConnected(0,-1,0)) {
-                   Real xf = fcy(i,j,k,0); // local (x,z) of centroid of z-face we are extrapolating to
-
-                   AMREX_D_TERM(Real delta_x = xf  - xc;,
-                                Real delta_y = 0.5 + yc;,
-                                Real delta_z = zf  - zc;);
-
-                    Real q_hat = state(i,j,k,n) + delta_x * slopes[0]
-                                                - delta_y * slopes[1];
-
-                    alpha = calc_alpha_stencil(q_hat, q_max, q_min, state(i,j,k,n), alpha);
-            }
-        }
-
-        AMREX_D_TERM(amrex::Real xalpha = alpha;,
-                     amrex::Real yalpha = alpha;,
-                     amrex::Real zalpha = alpha;);
-
-        if (cuts_x<2) xalpha = 0;
-        if (cuts_y<2) yalpha = 0;
-
-        return {AMREX_D_DECL(xalpha,yalpha,zalpha)};
-    }
 }
 
 void
@@ -896,7 +711,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
 
                    Real yf = fcx(i,j,k,0); // local (y,z) of centroid of z-face we are extrapolating to
                    // Compute slopes of component "n" of q
-                   const auto& slopes_eb_hi = amrex_calc_slopes_extdir_eb(i,j,k,n,q,ccc,
+                   const auto& slopes_eb_hi = amrex_lim_slopes_extdir_eb(i,j,k,n,q,ccc,
                                               AMREX_D_DECL(fcx,fcy,fcz), flag,
                                               AMREX_D_DECL(extdir_or_ho_ilo, extdir_or_ho_jlo, extdir_or_ho_klo), 
                                               AMREX_D_DECL(extdir_or_ho_ihi, extdir_or_ho_jhi, extdir_or_ho_khi), 
@@ -911,26 +726,26 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                                 Real delta_y = yf  - yc;,
                                 Real delta_z = zf  - zc;);
 
-                   const auto& alpha_lim_hi = calc_alpha_limiter(i,j,k,n,0,q,flag,slopes_eb_hi,AMREX_D_DECL(fcx, fcy, fcz),ccc);
                    //Adding temporal term with the normal derivative to the face
                    Real temp_u = -0.5*vel_c(i,j,k,0)*m_dt*dxinv[0];
  
-                   Real qpls = q(i  ,j,k,n) - delta_x * slopes_eb_hi[0] * alpha_lim_hi[0]
-                                            + delta_y * slopes_eb_hi[1] * alpha_lim_hi[1];
+                   Real qpls = q(i  ,j,k,n) - delta_x * slopes_eb_hi[0]
+                                            + delta_y * slopes_eb_hi[1];
 
                    Real cc_qmax = amrex::max(q(i,j,k,n),q(i-1,j,k,n));
                    Real cc_qmin = amrex::min(q(i,j,k,n),q(i-1,j,k,n));
 
                    //qpls = amrex::max(amrex::min(qpls, cc_qmax), cc_qmin);
 
-                   qpls += temp_u*slopes_eb_hi[0]*alpha_lim_hi[0];
+                   qpls += temp_u*slopes_eb_hi[0];
+
                    //Adding trans_force
                    if (fq) {
                        qpls += 0.5*m_dt*fq(i  ,j,k,n);
                    }
 
                    //Adding transverse derivative
-                   qpls += - (0.5*m_dt)*(vel_c(i,j,k,1))*dxinv[1]*alpha_lim_hi[1]*
+                   qpls += - (0.5*m_dt)*(vel_c(i,j,k,1))*dxinv[1]*
                                               (slopes_eb_hi[1]);
 
                    AMREX_D_TERM(xc = ccc(i-1,j,k,0);, // centroid of cell (i-1,j,k)
@@ -942,31 +757,30 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                                 delta_z = zf  - zc;);
 
                    // Compute slopes of component "n" of q
-                   const auto& slopes_eb_lo = amrex_calc_slopes_extdir_eb(i-1,j,k,n,q,ccc,
+                   const auto& slopes_eb_lo = amrex_lim_slopes_extdir_eb(i-1,j,k,n,q,ccc,
                                               AMREX_D_DECL(fcx,fcy,fcz), flag,
                                               AMREX_D_DECL(extdir_or_ho_ilo, extdir_or_ho_jlo, extdir_or_ho_klo),
                                               AMREX_D_DECL(extdir_or_ho_ihi, extdir_or_ho_jhi, extdir_or_ho_khi),
                                               AMREX_D_DECL(domain_ilo, domain_jlo, domain_klo),
                                               AMREX_D_DECL(domain_ihi, domain_jhi, domain_khi));
 
-                   const auto& alpha_lim_lo = calc_alpha_limiter(i-1,j,k,n,0,q,flag,slopes_eb_lo,AMREX_D_DECL(fcx, fcy, fcz),ccc);
-
                    //Adding temporal term with the normal derivative to the face
                    temp_u = -0.5*vel_c(i-1,j,k,0)*m_dt*dxinv[0];
 
-                   Real qmns = q(i-1,j,k,n) + delta_x * slopes_eb_lo[0] * alpha_lim_lo[0]
-                                            + delta_y * slopes_eb_lo[1] * alpha_lim_lo[1];
+                   Real qmns = q(i-1,j,k,n) + delta_x * slopes_eb_lo[0]
+                                            + delta_y * slopes_eb_lo[1];
 
                    //qmns = amrex::max(amrex::min(qmns, cc_qmax), cc_qmin);
 
-                   qmns += temp_u*slopes_eb_lo[0]*alpha_lim_lo[0];
+                   qmns += temp_u*slopes_eb_lo[0];
+
                    //Adding trans_force
                    if (fq) {
                        qmns += 0.5*m_dt*fq(i-1,j,k,n);
                    }
 
                    //Adding transverse derivative
-                   qmns += - (0.5*m_dt)*(vel_c(i-1,j,k,1))*dxinv[1]*alpha_lim_lo[1]*
+                   qmns += - (0.5*m_dt)*(vel_c(i-1,j,k,1))*dxinv[1]*
                                                    (slopes_eb_lo[1]);
 
                    if (umac(i,j,k) > small_vel) {
@@ -1033,31 +847,30 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                    Real cc_qmin = amrex::min(q(i,j,k,n),q(i,j-1,k,n));
      
                    // Compute slopes of component "n" of q
-                   const auto& slopes_eb_hi = amrex_calc_slopes_extdir_eb(i,j,k,n,q,ccc,
+                   const auto& slopes_eb_hi = amrex_lim_slopes_extdir_eb(i,j,k,n,q,ccc,
                                               AMREX_D_DECL(fcx,fcy,fcz), flag,
                                               AMREX_D_DECL(extdir_or_ho_ilo, extdir_or_ho_jlo, extdir_or_ho_klo),
                                               AMREX_D_DECL(extdir_or_ho_ihi, extdir_or_ho_jhi, extdir_or_ho_khi),
                                               AMREX_D_DECL(domain_ilo, domain_jlo, domain_klo),
                                               AMREX_D_DECL(domain_ihi, domain_jhi, domain_khi));
 
-                   const auto& alpha_lim_hi = calc_alpha_limiter(i,j,k,n,1,q,flag,slopes_eb_hi,AMREX_D_DECL(fcx, fcy, fcz),ccc);
-
                    //Adding temporal term with the normal derivative to the face
                    Real temp_v = -0.5*vel_c(i,j,k,1)*m_dt*dxinv[1]; 
 
-                   Real qpls = q(i,j  ,k,n) + delta_x * slopes_eb_hi[0] * alpha_lim_hi[0]
-                                            - delta_y * slopes_eb_hi[1] * alpha_lim_hi[1];
+                   Real qpls = q(i,j  ,k,n) + delta_x * slopes_eb_hi[0]
+                                            - delta_y * slopes_eb_hi[1];
 
                    //qpls = amrex::max(amrex::min(qpls, cc_qmax), cc_qmin);
     
-                   qpls += temp_v*slopes_eb_hi[1]*alpha_lim_hi[1];
+                   qpls += temp_v*slopes_eb_hi[1];
+
                    //Adding trans_force
                    if (fq) {
                        qpls += 0.5*m_dt*fq(i,j  ,k,n);
                    }
 
                    //Adding transverse derivative
-                   qpls += - (0.5*m_dt)*(vel_c(i,j,k,0))*dxinv[0]*alpha_lim_hi[0]*
+                   qpls += - (0.5*m_dt)*(vel_c(i,j,k,0))*dxinv[0]*
                                               (slopes_eb_hi[0]);
 
                    AMREX_D_TERM(xc = ccc(i,j-1,k,0);, // centroid of cell (i-1,j,k)
@@ -1069,31 +882,30 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                                 delta_z = zf  - zc;);
 
                    // Compute slopes of component "n" of q
-                   const auto& slopes_eb_lo = amrex_calc_slopes_extdir_eb(i,j-1,k,n,q,ccc,
+                   const auto& slopes_eb_lo = amrex_lim_slopes_extdir_eb(i,j-1,k,n,q,ccc,
                                               AMREX_D_DECL(fcx,fcy,fcz), flag,
                                               AMREX_D_DECL(extdir_or_ho_ilo, extdir_or_ho_jlo, extdir_or_ho_klo),
                                               AMREX_D_DECL(extdir_or_ho_ihi, extdir_or_ho_jhi, extdir_or_ho_khi),
                                               AMREX_D_DECL(domain_ilo, domain_jlo, domain_klo),
                                               AMREX_D_DECL(domain_ihi, domain_jhi, domain_khi));
 
-                   const auto& alpha_lim_lo = calc_alpha_limiter(i,j-1,k,n,1,q,flag,slopes_eb_lo,AMREX_D_DECL(fcx, fcy, fcz),ccc);
-
                    //Adding temporal term with the normal derivative to the face
                    temp_v = -0.5*vel_c(i,j-1,k,1)*m_dt*dxinv[1];
 
-                   Real qmns = q(i,j-1,k,n) + delta_x * slopes_eb_lo[0] * alpha_lim_lo[0]
-                                            + delta_y * slopes_eb_lo[1] * alpha_lim_lo[1];
+                   Real qmns = q(i,j-1,k,n) + delta_x * slopes_eb_lo[0]
+                                            + delta_y * slopes_eb_lo[1];
 
                    //qmns = amrex::max(amrex::min(qmns, cc_qmax), cc_qmin);
 
-                   qmns += temp_v*slopes_eb_lo[1]*alpha_lim_lo[1];
+                   qmns += temp_v*slopes_eb_lo[1];
+
                    //Adding trans_force
                    if (fq) {
                        qmns += 0.5*m_dt*fq(i,j-1,k,n);
                    }
 
                    //Adding transverse derivative
-                   qmns += - (0.5*m_dt)*(vel_c(i,j-1,k,0))*dxinv[0]*alpha_lim_lo[0]*
+                   qmns += - (0.5*m_dt)*(vel_c(i,j-1,k,0))*dxinv[0]*
                                               (slopes_eb_lo[0]);
 
                     if (vmac(i,j,k) > small_vel) {
@@ -1138,18 +950,16 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                Real cc_qmin = amrex::min(q(i,j,k,n),q(i-1,j,k,n));
 
                // Compute slopes of component "n" of q
-               const auto& slopes_eb_hi = amrex_calc_slopes_eb(i,j,k,n,q,ccc,flag);
-
-               const auto& alpha_lim_hi = calc_alpha_limiter(i,j,k,n,0,q,flag,slopes_eb_hi,AMREX_D_DECL(fcx, fcy, fcz),ccc);
+               const auto& slopes_eb_hi = amrex_lim_slopes_eb(i,j,k,n,q,ccc,AMREX_D_DECL(fcx,fcy,fcz),flag);
 
                Real temp_u = -0.5*vel_c(i,j,k,0)*m_dt*dxinv[0];
 
-               Real qpls = q(i  ,j,k,n) - delta_x * slopes_eb_hi[0] * alpha_lim_hi[0]
-                                        + delta_y * slopes_eb_hi[1] * alpha_lim_hi[1];
+               Real qpls = q(i  ,j,k,n) - delta_x * slopes_eb_hi[0]
+                                        + delta_y * slopes_eb_hi[1];
 
                //qpls = amrex::max(amrex::min(qpls, cc_qmax), cc_qmin);
 
-               qpls += temp_u*slopes_eb_hi[0]*alpha_lim_hi[0];
+               qpls += temp_u*slopes_eb_hi[0];
 
                //Adding trans_force
                if (fq) {
@@ -1157,7 +967,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                }   
 
                //Adding transverse derivative
-               qpls += - (0.5*m_dt)*(vel_c(i,j,k,1))*dxinv[1]*alpha_lim_hi[1]*
+               qpls += - (0.5*m_dt)*(vel_c(i,j,k,1))*dxinv[1]*
                                               (slopes_eb_hi[1]);
 
                AMREX_D_TERM(xc = ccc(i-1,j,k,0);, // centroid of cell (i-1,j,k)
@@ -1169,19 +979,17 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                             delta_z = zf  - zc;);
 
                // Compute slopes of component "n" of q
-               const auto& slopes_eb_lo = amrex_calc_slopes_eb(i-1,j,k,n,q,ccc,flag);
-
-               const auto& alpha_lim_lo = calc_alpha_limiter(i-1,j,k,n,0,q,flag,slopes_eb_lo,AMREX_D_DECL(fcx, fcy, fcz),ccc);
+               const auto& slopes_eb_lo = amrex_lim_slopes_eb(i-1,j,k,n,q,ccc,AMREX_D_DECL(fcx,fcy,fcz),flag);
 
                //Adding temporal term with the normal derivative to the face
                temp_u = -0.5*vel_c(i-1,j,k,0)*m_dt*dxinv[0];
 
-               Real qmns = q(i-1,j,k,n) + delta_x * slopes_eb_lo[0] * alpha_lim_lo[0]
-                                        + delta_y * slopes_eb_lo[1] * alpha_lim_lo[1];
+               Real qmns = q(i-1,j,k,n) + delta_x * slopes_eb_lo[0]
+                                        + delta_y * slopes_eb_lo[1];
 
                //qmns = amrex::max(amrex::min(qmns, cc_qmax), cc_qmin);
 
-               qmns += temp_u*slopes_eb_lo[0]*alpha_lim_lo[0];
+               qmns += temp_u*slopes_eb_lo[0];
 
                //Adding trans_force
                if (fq) {
@@ -1189,7 +997,7 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                }
 
                //Adding transverse derivative
-               qmns += - (0.5*m_dt)*(vel_c(i-1,j,k,1))*dxinv[1]*alpha_lim_lo[0]*
+               qmns += - (0.5*m_dt)*(vel_c(i-1,j,k,1))*dxinv[1]*
                                                (slopes_eb_lo[1]);
 
                if (umac(i,j,k) > small_vel) {
@@ -1231,26 +1039,25 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                Real cc_qmin = amrex::min(q(i,j,k,n),q(i,j-1,k,n));
 
                // Compute slopes of component "n" of q
-               const auto& slopes_eb_hi = amrex_calc_slopes_eb(i,j,k,n,q,ccc,flag);
-
-               const auto& alpha_lim_hi = calc_alpha_limiter(i,j,k,n,1,q,flag,slopes_eb_hi,AMREX_D_DECL(fcx, fcy, fcz),ccc);
+               const auto& slopes_eb_hi = amrex_lim_slopes_eb(i,j,k,n,q,ccc,AMREX_D_DECL(fcx,fcy,fcz),flag);
 
                //Adding temporal term with the normal derivative to the face 
                Real temp_v = -0.5*vel_c(i,j,k,1)*m_dt*dxinv[1];
 
-               Real qpls = q(i,j  ,k,n) + delta_x * slopes_eb_hi[0] * alpha_lim_hi[0]
-                                        - delta_y * slopes_eb_hi[1] * alpha_lim_hi[1];
+               Real qpls = q(i,j  ,k,n) + delta_x * slopes_eb_hi[0]
+                                        - delta_y * slopes_eb_hi[1];
 
                //qpls = amrex::max(amrex::min(qpls, cc_qmax), cc_qmin);
 
-               qpls += temp_v*slopes_eb_hi[1]*alpha_lim_hi[1];
+               qpls += temp_v*slopes_eb_hi[1];
+
                //Adding trans_force
                if (fq) {
                    qpls += 0.5*m_dt*fq(i,j  ,k,n);
                }
 
                //Adding transverse derivative
-               qpls += - (0.5*m_dt)*(vel_c(i,j,k,0))*dxinv[0]*alpha_lim_hi[0]*
+               qpls += - (0.5*m_dt)*(vel_c(i,j,k,0))*dxinv[0]*
                                           (slopes_eb_hi[0]);
 
                AMREX_D_TERM(xc = ccc(i,j-1,k,0);, // centroid of cell (i-1,j,k)
@@ -1262,26 +1069,25 @@ godunov::compute_godunov_advection_eb (int lev, Box const& bx, int ncomp,
                             delta_z = zf  - zc;);
 
                // Compute slopes of component "n" of q
-               const auto& slopes_eb_lo = amrex_calc_slopes_eb(i,j-1,k,n,q,ccc,flag);
-
-               const auto& alpha_lim_lo = calc_alpha_limiter(i,j-1,k,n,1,q,flag,slopes_eb_lo,AMREX_D_DECL(fcx, fcy, fcz),ccc);
+               const auto& slopes_eb_lo = amrex_lim_slopes_eb(i,j-1,k,n,q,ccc,AMREX_D_DECL(fcx,fcy,fcz),flag);
 
                //Adding temporal term with the normal derivative to the face 
                temp_v = -0.5*vel_c(i,j-1,k,1)*m_dt*dxinv[1];
 
-               Real qmns = q(i,j-1,k,n) + delta_x * slopes_eb_lo[0] * alpha_lim_lo[0]
-                                        + delta_y * slopes_eb_lo[1] * alpha_lim_lo[1];
+               Real qmns = q(i,j-1,k,n) + delta_x * slopes_eb_lo[0]
+                                        + delta_y * slopes_eb_lo[1];
 
                //qmns = amrex::max(amrex::min(qmns, cc_qmax), cc_qmin);
 
-               qmns += temp_v*slopes_eb_lo[1]*alpha_lim_lo[1];
+               qmns += temp_v*slopes_eb_lo[1];
+
                //Adding trans_force
                if (fq) {
                    qmns += 0.5*m_dt*fq(i,j-1,k,n);
                }
 
                //Adding transverse derivative
-               qmns += - (0.5*m_dt)*(vel_c(i,j-1,k,0))*dxinv[0]*alpha_lim_lo[0]*
+               qmns += - (0.5*m_dt)*(vel_c(i,j-1,k,0))*dxinv[0]*
                                           (slopes_eb_lo[0]);
 
                if (vmac(i,j,k) > small_vel) {
