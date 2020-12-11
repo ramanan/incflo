@@ -45,6 +45,12 @@ void godunov::predict_godunov (int lev, Real time, MultiFab& u_mac, MultiFab& v_
             Array4<Real> const& a_umac = u_mac.array(mfi);
             Array4<Real> const& a_vmac = v_mac.array(mfi);
             Array4<Real> const& a_wmac = w_mac.array(mfi);
+
+            Array4<Real const> const& mac_phi_arr = mac_phi.const_array(mfi);
+            Array4<Real const> const& inv_rho_x   = inv_rho[0].const_array(mfi);
+            Array4<Real const> const& inv_rho_y   = inv_rho[1].const_array(mfi);
+            Array4<Real const> const& inv_rho_z   = inv_rho[2].const_array(mfi);
+
             Array4<Real const> const& a_vel = vel.const_array(mfi);
             Array4<Real const> const& a_f = vel_forces.const_array(mfi);
 #ifdef AMREX_USE_EB
