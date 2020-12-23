@@ -25,6 +25,7 @@ namespace {
     }
 }
 
+#ifdef AMREX_USE_EB
 void
 godunov::compute_godunov_advection_ls (int lev, Box const& bx, int ncomp,
                                        Array4<Real> const& dqdt,
@@ -323,6 +324,7 @@ godunov::compute_godunov_advection_ls (int lev, Box const& bx, int ncomp,
        }
     });
 }
+#endif
 
 void
 godunov::compute_godunov_advection (int lev, Box const& bx, int ncomp,

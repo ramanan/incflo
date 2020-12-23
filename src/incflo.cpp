@@ -92,10 +92,12 @@ void incflo::InitData ()
     }
 
 #ifdef AMREX_USE_EB
+#if (AMREX_SPACEDIM == 3)
     ParmParse pp("incflo");
     bool write_eb_surface = false;
     pp.query("write_eb_surface", write_eb_surface);
     if (write_eb_surface) WriteMyEBSurface();
+#endif
 #endif
 
     if (m_verbose > 0 and ParallelDescriptor::IOProcessor()) {
@@ -207,6 +209,15 @@ void incflo::MakeNewLevelFromScratch (int lev, Real time, const BoxArray& new_gr
     if (m_restart_file.empty()) {
         prob_init_fluid(lev);
     }
+
+#if AMREX_USE_EB
+    macproj.reset(new MacProjector(Geom(0,finest_level),
+                                   MLMG::Location::FaceCentroid,  // Location of mac_vec
+                                   MLMG::Location::FaceCentroid,  // Location of beta
+                                   MLMG::Location::CellCenter  ) ); // Location of solution variable phi
+#else
+    macproj.reset(new MacProjector(Geom(0,finest_level)));
+#endif
 }
 
 bool

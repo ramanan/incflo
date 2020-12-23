@@ -32,74 +32,61 @@ incflo::compute_convective_term (Vector<MultiFab*> const& conv_u,
 {
     int ngmac = nghost_mac();
 
-    Real l_dt = m_dt;
-
-    auto mac_phi = get_mac_phi();
-
-    // This will hold (1/rho) on faces
-    Vector<Array<MultiFab,AMREX_SPACEDIM> > inv_rho(finest_level+1);
-    for (int lev=0; lev <= finest_level; ++lev)
-    {
-        AMREX_D_TERM(inv_rho[lev][0].define(u_mac[lev]->boxArray(),dmap[lev],1,0,MFInfo(),Factory(lev));,
-                     inv_rho[lev][1].define(v_mac[lev]->boxArray(),dmap[lev],1,0,MFInfo(),Factory(lev));,
-                     inv_rho[lev][2].define(w_mac[lev]->boxArray(),dmap[lev],1,0,MFInfo(),Factory(lev)););
-    }
-
-
+    // We first compute the velocity forcing terms to be used in predicting
+    //    to faces before the MAC projection
     if (m_use_godunov) {
-     
+
         bool include_pressure_gradient = !(m_use_mac_phi_in_godunov);
         compute_vel_forces(vel_forces, vel, density, tracer, tracer, include_pressure_gradient);
 
         if (m_godunov_include_diff_in_forcing)
-            for (int lev = 0; lev <= finest_level; ++lev) 
+            for (int lev = 0; lev <= finest_level; ++lev)
                 MultiFab::Add(*vel_forces[lev], m_leveldata[lev]->divtau_o, 0, 0, AMREX_SPACEDIM, 0);
 
-        if (nghost_force() > 0)  
+        if (nghost_force() > 0)
             fillpatch_force(m_cur_time, vel_forces, nghost_force());
+    }
+
+    // This will hold (1/rho) on faces
+    Vector<MultiFab> inv_rho_x(finest_level+1);
+    Vector<MultiFab> inv_rho_y(finest_level+1);
+#if (AMREX_SPACEDIM == 3)
+    Vector<MultiFab> inv_rho_z(finest_level+1);
+#endif
+
+    Vector<Array<MultiFab*,AMREX_SPACEDIM> > inv_rho(finest_level+1);
+    for (int lev=0; lev <= finest_level; ++lev)
+    {
+        AMREX_D_TERM(inv_rho[lev][0] = &inv_rho_x[lev];,
+                     inv_rho[lev][1] = &inv_rho_y[lev];,
+                     inv_rho[lev][2] = &inv_rho_z[lev];);
     }
 
     for (int lev = 0; lev <= finest_level; ++lev) {
 
+        AMREX_D_TERM(
+           inv_rho_x[lev].define(u_mac[lev]->boxArray(),dmap[lev],1,0,MFInfo(),Factory(lev));,
+           inv_rho_y[lev].define(v_mac[lev]->boxArray(),dmap[lev],1,0,MFInfo(),Factory(lev));,
+           inv_rho_z[lev].define(w_mac[lev]->boxArray(),dmap[lev],1,0,MFInfo(),Factory(lev)););
+
 #ifdef AMREX_USE_EB
         const EBFArrayBoxFactory* ebfact = &EBFactory(lev);
-        EB_interp_CellCentroid_to_FaceCentroid (*density[lev], GetArrOfPtrs(inv_rho[lev]), 0, 0, 1,
-                                                geom[lev], get_density_bcrec());
+        EB_interp_CellCentroid_to_FaceCentroid (*density[lev], inv_rho[lev],
+                                                0, 0, 1, geom[lev], get_density_bcrec());
 #else
-        amrex::average_cellcenter_to_face(GetArrOfPtrs(inv_rho[lev]), *density[lev], geom[lev]);
+        amrex::average_cellcenter_to_face(inv_rho[lev], *density[lev], geom[lev]);
 #endif
 
         for (int idim = 0; idim < AMREX_SPACEDIM; ++idim) {
-            inv_rho[lev][idim].invert(1.0, 0);
-        }
-
-        mac_phi[lev]->FillBoundary(geom[lev].periodicity());
-
-        // Predict normal velocity to faces -- note that the {u_mac, v_mac, w_mac}
-        //    returned from this call are on face CENTROIDS
-
-        if (m_use_godunov) {
-            godunov::predict_godunov(lev, time, 
-                                     AMREX_D_DECL(*u_mac[lev], *v_mac[lev], *w_mac[lev]), 
-                                     *mac_phi[lev], *vel[lev], *vel_forces[lev], inv_rho[lev],
-                                     get_velocity_bcrec(), get_velocity_bcrec_device_ptr(),
-#ifdef AMREX_USE_EB
-                                     ebfact,
-#endif
-                                     Geom(), l_dt, m_godunov_ppm, m_godunov_use_forces_in_trans,
-                                     m_use_mac_phi_in_godunov);
-        } else {
-
-            mol::predict_vels_on_faces(lev, AMREX_D_DECL(*u_mac[lev], *v_mac[lev], *w_mac[lev]), *vel[lev],
-                                       get_velocity_bcrec(), get_velocity_bcrec_device_ptr(), 
-#ifdef AMREX_USE_EB
-                                       ebfact,
-#endif
-                                       Geom()); 
+            inv_rho[lev][idim]->invert(1.0, 0);
         }
     }
 
-    apply_MAC_projection(AMREX_D_DECL(u_mac, v_mac, w_mac), GetVecOfArrOfConstPtrs(inv_rho), time);
+    compute_MAC_projected_velocities(vel, 
+                                     AMREX_D_DECL(u_mac,v_mac,w_mac),
+                                     AMREX_D_DECL(GetVecOfPtrs(inv_rho_x), GetVecOfPtrs(inv_rho_y),
+                                                  GetVecOfPtrs(inv_rho_z)),
+                                     vel_forces, time);
 
     // We now re-compute the velocity forcing terms including the pressure gradient,
     //    and compute the tracer forcing terms for the first time
@@ -177,8 +164,6 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
                                  Array4<Real const> const& ftra)
 {
 #ifdef AMREX_USE_EB
-    //AMREX_ALWAYS_ASSERT(!m_use_godunov);
-
     auto const& fact = EBFactory(lev);
     EBCellFlagFab const& flagfab = fact.getMultiEBCellFlagFab()[mfi];
     Array4<EBCellFlag const> const& flag = flagfab.const_array();
@@ -384,6 +369,9 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
     else
     {
         Box tmpbox = amrex::surroundingNodes(bx);
+        //Here we need to declare tmpcomp = nmaxcomp*3 (for 2D and 3D) because we need 
+        //three temporal arrays with number of components equal to AMREX_SPACEDIM 
+        //for the redistribute_eb call
         int tmpcomp = nmaxcomp*3;
 #ifdef AMREX_USE_EB
         Box gbx = bx;
@@ -405,6 +393,9 @@ incflo::compute_convective_term (Box const& bx, int lev, MFIter const& mfi,
         if (!regular)
         {
             Array4<Real> scratch = tmpfab.array(0);
+            //Here we need to declare dUdt_tmp = tmpfab.array(nmaxcomp*3) (for 2D and 3D) 
+            //because we need three temporal arrays with number of components equal to AMREX_SPACEDIM 
+            //for the redistribute_eb call
             Array4<Real> dUdt_tmp = tmpfab.array(nmaxcomp*3);
 
             // velocity

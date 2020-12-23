@@ -4,6 +4,7 @@
 #include <AMReX_MultiFabUtil.H>
 #include <AMReX_ParmParse.H>
 #include <AMReX_iMultiFab.H>
+#include <AMReX_MacProjector.H>
 #include <AMReX_NodalProjector.H>
 #include <AMReX_Math.H>
 
@@ -111,6 +112,17 @@ public: // for cuda
                                   amrex::Vector<amrex::MultiFab      *> const& tra_forces,
                                   amrex::Real time);
 
+    void compute_MAC_projected_velocities (
+                                  amrex::Vector<amrex::MultiFab const*> const& vel,
+                                  AMREX_D_DECL(amrex::Vector<amrex::MultiFab*> const& u_mac,
+                                               amrex::Vector<amrex::MultiFab*> const& v_mac,
+                                               amrex::Vector<amrex::MultiFab*> const& w_mac),
+                                  AMREX_D_DECL(amrex::Vector<amrex::MultiFab*> const& inv_rho_x,
+                                               amrex::Vector<amrex::MultiFab*> const& inv_rho_y,
+                                               amrex::Vector<amrex::MultiFab*> const& inv_rho_z),
+                                  amrex::Vector<amrex::MultiFab      *> const& vel_forces,
+                                  amrex::Real time);
+
     void compute_convective_term (amrex::Box const& bx, int lev, amrex::MFIter const& mfi,
                                   amrex::Array4<amrex::Real> const& dvdt, // velocity
                                   amrex::Array4<amrex::Real> const& drdt, // density
@@ -151,8 +163,8 @@ public: // for cuda
     void ComputeDrag ();
     amrex::Real ComputeKineticEnergy () const;
 
-    void DiffFromExact (int lev, amrex::Geometry& lev_geom, amrex::Real t, amrex::MultiFab& error,
-                        int icomp_src, int icomp_err);
+    void DiffFromExact (int lev, amrex::Geometry& lev_geom, amrex::Real time, amrex::Real dt, 
+                        amrex::MultiFab& error, int icomp_src, int icomp_err);
 
     virtual void compute_strainrate_at_level (int lev,
                                               amrex::MultiFab* sr,
@@ -314,6 +326,8 @@ private:
     //           mac_proj.bottom_atol
     //           mac_proj.bottom_solver
     // More info at "amrex/Src/LinearSolvers/Projections/AMReX_MacProjector.cpp"
+
+    std::unique_ptr<amrex::MacProjector> macproj;
 
     int m_mac_mg_verbose = 0;
     int m_mac_mg_bottom_verbose = 0;
@@ -706,12 +720,6 @@ private:
     ///////////////////////////////////////////////////////////////////////////
 
     void init_advection ();
-
-    void apply_MAC_projection (AMREX_D_DECL(amrex::Vector<amrex::MultiFab*> const& u_mac,
-                                            amrex::Vector<amrex::MultiFab*> const& v_mac,
-                                            amrex::Vector<amrex::MultiFab*> const& w_mac),
-                               amrex::Vector<amrex::Array<amrex::MultiFab const*,AMREX_SPACEDIM>> const& inv_rho,
-                               amrex::Real time);
 
     ///////////////////////////////////////////////////////////////////////////
     //

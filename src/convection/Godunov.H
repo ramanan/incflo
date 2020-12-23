@@ -23,7 +23,9 @@ namespace godunov {
                           amrex::MultiFab const& mac_phi, 
                           amrex::MultiFab const& vel, 
                           amrex::MultiFab const& vel_forces,
-                          amrex::Array<amrex::MultiFab,AMREX_SPACEDIM> const& inv_rho,
+                          AMREX_D_DECL(amrex::MultiFab const& inv_rho_x,
+                                       amrex::MultiFab const& inv_rho_y,
+                                       amrex::MultiFab const& inv_rho_z),
                           amrex::Vector<amrex::BCRec> const& h_bcrec,
                                         amrex::BCRec  const* d_bcrec,
 #ifdef AMREX_USE_EB
@@ -31,6 +33,9 @@ namespace godunov {
 #endif
                           amrex::Vector<amrex::Geometry> geom,
                           amrex::Real dt, bool use_ppm, bool use_forces_in_trans,
+                          AMREX_D_DECL(amrex::MultiFab const& gmacphi_x,
+                                       amrex::MultiFab const& gmacphi_y,
+                                       amrex::MultiFab const& gmacphi_z),
                           bool use_mac_phi_in_godunov);
 
     void predict_plm_x (int lev, amrex::Box const& bx, int ncomp,
@@ -121,6 +126,9 @@ namespace godunov {
                                  amrex::Real dt,
                                  amrex::BCRec const* d_bcrec,
                                  bool use_forces_in_trans,
+                                 AMREX_D_DECL(amrex::Array4<amrex::Real const> const& gmacphi_x,
+                                              amrex::Array4<amrex::Real const> const& gmacphi_y,
+                                              amrex::Array4<amrex::Real const> const& gmacphi_z),
                                  bool use_mac_phi_in_godunov,
                                  amrex::Real* p);
 
@@ -139,6 +147,7 @@ namespace godunov {
                                     bool use_forces_in_trans,
                                     bool is_velocity = false);
 
+#ifdef AMREX_USE_EB
     void compute_godunov_advection_ls (int lev, amrex::Box const& bx, int ncomp,
                                        amrex::Array4<amrex::Real> const& dqdt,
                                        amrex::Array4<amrex::Real const> const& q,
@@ -159,7 +168,6 @@ namespace godunov {
                                        amrex::Array4<amrex::Real const> const& ccc,
                                        bool is_velocity = false);
    
-#ifdef AMREX_USE_EB
     void predict_vels_on_faces_eb (int lev,
                                    amrex::Box const& ccbx,
                                    AMREX_D_DECL(amrex::Box const& ubx,
