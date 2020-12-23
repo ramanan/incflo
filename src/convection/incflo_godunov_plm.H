@@ -229,8 +229,9 @@ void Godunov_plm_fpu_ls_x (const int i, const int j, const int k, const int n,
             } else {
 
               Real yf = fcx(i,j,k,0); // local (y,z) of centroid of x-face we are extrapolating to
+#if (AMREX_SPACEDIM == 3)
               Real zf = fcx(i,j,k,1); // local (y,z) of centroid of x-face we are extrapolating to
-
+#endif
               const auto& slopes_eb_pls = amrex_lim_slopes_extdir_eb(i,j,k,n,S,ccc,
                                           AMREX_D_DECL(fcx,fcy,fcz), flag,
                                           AMREX_D_DECL(extdir_or_ho_ilo, extdir_or_ho_jlo, extdir_or_ho_klo),
@@ -273,8 +274,9 @@ void Godunov_plm_fpu_ls_x (const int i, const int j, const int k, const int n,
             } else {
 
               Real yf = fcx(i,j,k,0); // local (y,z) of centroid of x-face we are extrapolating to
+#if (AMREX_SPACEDIM == 3)
               Real zf = fcx(i,j,k,1); // local (y,z) of centroid of x-face we are extrapolating to
-
+#endif
               const auto& slopes_eb_mns =  amrex_lim_slopes_extdir_eb(i-1,j,k,n,S,ccc,
                                            AMREX_D_DECL(fcx,fcy,fcz), flag,
                                            AMREX_D_DECL(extdir_or_ho_ilo, extdir_or_ho_jlo, extdir_or_ho_klo),
@@ -312,8 +314,9 @@ void Godunov_plm_fpu_ls_x (const int i, const int j, const int k, const int n,
             // Note that we still call the "extdir version" here because interior cells one away from the 
             // boundary will still see the boundary condition in the 4th order slope
               Real yf = fcx(i,j,k,0); // local (y,z) of centroid of x-face we are extrapolating to
+#if (AMREX_SPACEDIM == 3)
               Real zf = fcx(i,j,k,1); // local (y,z) of centroid of x-face we are extrapolating to
-
+#endif
               const auto& slopes_eb_pls = amrex_lim_slopes_extdir_eb(i,j,k,n,S,ccc,
                                           AMREX_D_DECL(fcx,fcy,fcz), flag,
                                           AMREX_D_DECL(extdir_or_ho_ilo, extdir_or_ho_jlo, extdir_or_ho_klo),
@@ -437,8 +440,9 @@ void Godunov_plm_fpu_ls_y (const int i, const int j, const int k, const int n,
             } else {
 
                 Real xf = fcy(i,j,k,0); // local (x,z) of centroid of y-face we are extrapolating to
+#if (AMREX_SPACEDIM == 3)
                 Real zf = fcy(i,j,k,1); // local (x,z) of centroid of y-face we are extrapolating to
-
+#endif
                 AMREX_D_TERM(Real xc = ccc(i,j,k,0);, // centroid of cell (i,j,k)
                              Real yc = ccc(i,j,k,1);,
                              Real zc = ccc(i,j,k,2););
@@ -482,7 +486,9 @@ void Godunov_plm_fpu_ls_y (const int i, const int j, const int k, const int n,
             } else {
 
                 Real xf = fcy(i,j,k,0); // local (x,z) of centroid of y-face we are extrapolating to
+#if (AMREX_SPACEDIM == 3)
                 Real zf = fcy(i,j,k,1); // local (x,z) of centroid of y-face we are extrapolating to
+#endif
 
                 AMREX_D_TERM(Real xc = ccc(i,j-1,k,0);, // centroid of cell (i,j,k)
                              Real yc = ccc(i,j-1,k,1);,
@@ -523,8 +529,9 @@ void Godunov_plm_fpu_ls_y (const int i, const int j, const int k, const int n,
             // Note that we still call the "extdir version" here because interior cells one away from the 
             // boundary will still see the boundary condition in the 4th order slope
                 Real xf = fcy(i,j,k,0); // local (x,z) of centroid of y-face we are extrapolating to
+#if (AMREX_SPACEDIM == 3)
                 Real zf = fcy(i,j,k,1); // local (x,z) of centroid of y-face we are extrapolating to
-
+#endif
                 AMREX_D_TERM(Real xc = ccc(i,j,k,0);, // centroid of cell (i,j,k)
                              Real yc = ccc(i,j,k,1);,
                              Real zc = ccc(i,j,k,2););
