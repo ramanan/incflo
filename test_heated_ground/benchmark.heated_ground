@@ -1,6 +1,5 @@
 max_step                = 50000
 max_step                = 10000
-max_step                = 1
 
 incflo.advection_type   = "Godunov"
 incflo.godunov_include_diff_in_forcing = true
