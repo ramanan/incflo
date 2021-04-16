@@ -1,4 +1,4 @@
-target_include_directories(incflo PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+target_include_directories(incflo PRIVATE ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_LIST_DIR}/MOL ${CMAKE_CURRENT_LIST_DIR}/Godunov ${CMAKE_CURRENT_LIST_DIR}/Redistribution ${CMAKE_CURRENT_LIST_DIR}/EBGodunov)
 
 target_sources(incflo
    PRIVATE
@@ -6,16 +6,28 @@ target_sources(incflo
    incflo_compute_fluxes.cpp
    incflo_redistribute_convective_term.cpp
    incflo_compute_update.cpp
-   incflo_correct_small_cells.cpp
-   incflo_MAC_projection.cpp
-   incflo_mol_predict_eb.cpp
-   incflo_mol_predict.cpp
-   incflo_mol_fluxes_eb.cpp
-   incflo_mol_fluxes.cpp
-   incflo_godunov_predict_${INCFLO_DIM}D.cpp
-   incflo_godunov_fluxes_${INCFLO_DIM}D.cpp
-   incflo_godunov_plm.cpp
-   incflo_godunov_ppm.cpp
-   incflo_godunov_plm.H
-   incflo_godunov_ppm.H
+   MOL/incflo_correct_small_cells.cpp
+   incflo_compute_MAC_projected_velocities.cpp
+   MOL/incflo_mol_predict_eb.cpp
+   MOL/incflo_mol_predict.cpp
+   MOL/incflo_mol_fluxes_eb.cpp
+   MOL/incflo_mol_fluxes.cpp
+   Godunov/incflo_godunov_predict_${INCFLO_DIM}D.cpp
+   Godunov/incflo_godunov_fluxes_${INCFLO_DIM}D.cpp
+   Godunov/incflo_godunov_plm.cpp
+   Godunov/incflo_godunov_ppm.cpp
+   Godunov/incflo_godunov_plm.H
+   Godunov/incflo_godunov_ppm.H
+   Redistribution/incflo_create_itracker_${INCFLO_DIM}d.cpp
+   Redistribution/incflo_merge_redistribute.cpp
+   Redistribution/incflo_state_redistribute.cpp
+   Redistribution/incflo_redistribute.cpp
+   EBGodunov/incflo_ebgodunov_fluxes_${INCFLO_DIM}D.cpp
+   EBGodunov/incflo_ebgodunov_predict.cpp
+   EBGodunov/incflo_ebgodunov_predict_${INCFLO_DIM}D.cpp
+   EBGodunov/incflo_ebgodunov_make_trans_vels.cpp
+   EBGodunov/incflo_ebgodunov_plm.cpp
+   EBGodunov/incflo_ebgodunov_plm_fpu.cpp
+   EBGodunov/incflo_ebgodunov_corner_couple.H
+   EBGodunov/incflo_ebgodunov_transverse_${INCFLO_DIM}D_K.H
    )

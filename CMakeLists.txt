@@ -4,7 +4,7 @@ project( incflo
    #VERSION 1.0
    HOMEPAGE_URL "https://amrex-codes.github.io/incflo/"
    DESCRIPTION "An adaptive mesh, variable-density incompressible Navier-Stokes solver with no subcycling in time"
-   LANGUAGES C CXX)
+   LANGUAGES C CXX Fortran)
 
 #
 # Set default build type to Release
@@ -116,6 +116,7 @@ endif ()
 
 add_executable(incflo)
 target_link_libraries(incflo PUBLIC AMReX::amrex)
+set_target_properties(incflo PROPERTIES SUFFIX ".exe")
 
 #
 # If INCFLO_EB=false, we could still link against an external
