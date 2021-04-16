@@ -1,5 +1,5 @@
-#ifdef AMREX_USE_EB
 #include <Redistribution.H>
+#ifdef AMREX_USE_EB
 #include <AMReX_EB_utils.H>
 
 using namespace amrex;

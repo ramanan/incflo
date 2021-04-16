@@ -1,7 +1,7 @@
+#include <Redistribution.H>
 #ifdef AMREX_USE_EB
 
 #include <Convection.H>
-#include <Redistribution.H>
 #include <AMReX_MultiFabUtil.H>
 #include <AMReX_MultiCutFab.H>
 

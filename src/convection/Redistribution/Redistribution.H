@@ -5,6 +5,8 @@
 #ifndef Redistribution_H
 #define Redistribution_H
 
+#include <AMReX_Config.H>
+
 #ifdef AMREX_USE_EB
 
 #include <AMReX_MultiFabUtil.H>
